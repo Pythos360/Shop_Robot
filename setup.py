@@ -26,7 +26,6 @@ setup(
         'console_scripts': [
             'controller = my_pi_nodes.controller:main',
             'serial_bridge = my_pi_nodes.serial_bridge:main',
-            'delta_viz = delta_viz.delta_viz_node:main'
         ],
     },
 )
