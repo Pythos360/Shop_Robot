@@ -1,7 +1,7 @@
 import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import Joy
-from motor_control.msg import MotorCmd
+
 
 BTN_MOTOR_A   = 0   # pick motor A
 BTN_MOTOR_B   = 1   # pick motor B
