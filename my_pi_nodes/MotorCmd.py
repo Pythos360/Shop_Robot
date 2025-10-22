@@ -1,6 +1,8 @@
 import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import Joy
+# Replace the custom msg with a standard one:
+from std_msgs.msg import Float32MultiArray as MotorCmd
 
 
 BTN_MOTOR_A   = 0   # pick motor A
