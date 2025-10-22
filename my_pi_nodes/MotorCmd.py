@@ -15,6 +15,20 @@ class JoyToStep(Node):
         self.pub = self.create_publisher(MotorCmd, 'motor_cmd', 10)
         self.sub = self.create_subscription(Joy, 'joy', self.on_joy, 10)
 
+    def stripMsg(self, msg: Joy):
+        Vel_A = msg.axes[0] if len(msg.axes) > 0 else 0.0
+        Vel_B = msg.axes[1] if len(msg.axes) > 1 else 0.0
+        Vel_C = msg.axes[2] if len(msg.axes) > 2 else 0.0
+
+        Speed_Down = msg.buttons[4] if len(msg.buttons) > 4 else None
+        Speed_Up = msg.buttons[5] if len(mesg.buttons) > 5 else None
+
+        Motor_A = msg.buttons[0] if len(mesg.buttons) > 0 else 0
+        Motor_B = msg.buttons[1] if len(mesg.buttons) > 1 else 0
+        Motor_C = msg.buttons[2] if len(mesg.buttons) > 2 else 0
+        
+        return Vel_A, Vel_B, Vel_C, Speed_Down, Speed_Up, Motor_A, Motor_B, Motor_C
+
     def on_joy(self, msg: Joy):
         enable = (msg.buttons[BTN_ENABLE] == 1)
         v = msg.axes[AXIS_THROTTLE] if len(msg.axes) > AXIS_THROTTLE else 0.0
