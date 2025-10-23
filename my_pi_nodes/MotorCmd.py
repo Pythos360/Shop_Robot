@@ -10,8 +10,8 @@ BTN_MOTOR_B   = 1   # pick motor B
 BTN_MOTOR_C   = 2   # pick motor C
 BTN_DIRECTION = 3   # toggle/hold direction (0/1)
 
-BTN_SPEED_DOWN = 4  # slower
-BTN_SPEED_UP   = 5  # faster
+BTN_SPEED_DOWN = 5  # slower
+BTN_SPEED_UP   = 4  # faster
 
 # --- Axes ---
 AXIS_A = 0  # velocity source (ONLY Axis-A is used now)
