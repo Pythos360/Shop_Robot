@@ -84,7 +84,7 @@ class JoyToStep(Node):
         # motor_id: 0=A, 1=B, 2=C
         motor_id = {'A': 0.0, 'B': 1.0, 'C': 2.0}.get(motor, 0.0)
         cmd = MotorCmd()
-        cmd.data = [motor_id, float(vel), float(direction), float(self.off_us)]
+        cmd.data = [motor_id, float(vel), float(self.off_us)]
         self.pub.publish(cmd)
 
         self.get_logger().info(
