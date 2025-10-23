@@ -1,22 +1,20 @@
 import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import Joy
-# Replace the custom msg with a standard one:
+# standard message transport; we alias it to MotorCmd for minimal code changes
 from std_msgs.msg import Float32MultiArray as MotorCmd
 
-
+# --- Buttons ---
 BTN_MOTOR_A   = 0   # pick motor A
 BTN_MOTOR_B   = 1   # pick motor B
 BTN_MOTOR_C   = 2   # pick motor C
-BTN_DIRECTION = 3   # your direction toggle/hold (0/1)
-BTN_ENABLE    = 0   # reuse A as enable if that's your plan
+BTN_DIRECTION = 3   # toggle/hold direction (0/1)
 
 BTN_SPEED_DOWN = 4  # slower
 BTN_SPEED_UP   = 5  # faster
 
-AXIS_A = 0  # velocity source for motor A
-AXIS_B = 1  # velocity source for motor B
-AXIS_C = 2  # velocity source for motor C
+# --- Axes ---
+AXIS_A = 0  # velocity source (ONLY Axis-A is used now)
 
 MIN_OFF_US = 100
 MAX_OFF_US = 5000
@@ -36,11 +34,10 @@ class JoyToStep(Node):
         self.pub = self.create_publisher(MotorCmd, 'motor_cmd', 10)
         self.sub = self.create_subscription(Joy, 'joy', self.on_joy, 10)
 
-        # --- state for "remember last motor/vel" and button edges ---
+        # state
         self.last_motor = 'A'                # 'A' | 'B' | 'C'
-        self.last_vel   = {'A': 0, 'B': 0, 'C': 0}
         self.prev_buttons = []               # for edge detection
-        self.off_us = 800                    # current speed setting
+        self.off_us = 800                    # current step-off (speed) setting
 
     def _btn(self, buttons, i):
         return (i < len(buttons)) and (buttons[i] == 1)
@@ -54,58 +51,44 @@ class JoyToStep(Node):
         return prev == 0 and now == 1
 
     def on_joy(self, msg: Joy):
-        # --- read velocities per motor from axes ---
-        velA = vel_from_axis(self._axis(msg.axes, AXIS_A))
-        velB = vel_from_axis(self._axis(msg.axes, AXIS_B))
-        velC = vel_from_axis(self._axis(msg.axes, AXIS_C))
+        # --- velocity ALWAYS from Axis-A ---
+        vel = vel_from_axis(self._axis(msg.axes, AXIS_A))
 
-        # cache latest raw vels always
-        self.last_vel['A'] = velA
-        self.last_vel['B'] = velB
-        self.last_vel['C'] = velC
-
-        # --- select motor (if any button pressed); otherwise keep last ---
-        motor = None
-        if self._btn(msg.buttons, BTN_MOTOR_A):
+        # --- select motor (if any button pressed); else keep last ---
+        if   self._btn(msg.buttons, BTN_MOTOR_A):
             motor = 'A'
         elif self._btn(msg.buttons, BTN_MOTOR_B):
             motor = 'B'
         elif self._btn(msg.buttons, BTN_MOTOR_C):
             motor = 'C'
         else:
-            motor = self.last_motor  # no button pressed -> use last motor
+            motor = self.last_motor
 
-        # update last_motor if a selection is actively pressed
+        # update last_motor if selection held
         if self._btn(msg.buttons, BTN_MOTOR_A) or \
            self._btn(msg.buttons, BTN_MOTOR_B) or \
            self._btn(msg.buttons, BTN_MOTOR_C):
             self.last_motor = motor
 
-        # --- choose vel for the current (or last) motor ---
-        vel_map = {'A': velA, 'B': velB, 'C': velC}
-        vel = vel_map[motor] if motor in vel_map else 0
-        # when no motor buttons are held, this still uses the
-        # latest cached vel for last_motor (because we updated last_vel above)
-        # If you instead want "freeze" behavior, replace with:
-        # vel = self.last_vel[self.last_motor]
-
-        # --- speed up/down with edges (one step per press) ---
+        # --- speed up/down on button edges ---
         if self._rose(msg.buttons, BTN_SPEED_UP):
             self.off_us = max(MIN_OFF_US, self.off_us - 100)   # faster
         if self._rose(msg.buttons, BTN_SPEED_DOWN):
             self.off_us = min(MAX_OFF_US, self.off_us + 100)   # slower
 
-        # --- other fields ---
-        enable    = self._btn(msg.buttons, BTN_ENABLE)
+        # --- direction button (0/1) ---
         direction = 1 if self._btn(msg.buttons, BTN_DIRECTION) else 0
 
-        # Publish (MotorCmd has only enable/direction/step_us)
-        cmd = MotorCmd(enable=enable, direction=direction, step_us=self.off_us)
+        # --- publish ---
+        # data layout: [motor_id, vel, direction, off_us]
+        # motor_id: 0=A, 1=B, 2=C
+        motor_id = {'A': 0.0, 'B': 1.0, 'C': 2.0}.get(motor, 0.0)
+        cmd = MotorCmd()
+        cmd.data = [motor_id, float(vel), float(direction), float(self.off_us)]
         self.pub.publish(cmd)
 
-        # Helpful debug print to verify your “last motor/vel” behavior:
         self.get_logger().info(
-            f"motor={motor} vel={vel} enable={enable} dir={direction} off_us={self.off_us}"
+            f"motor={motor} (id={int(motor_id)}) vel={vel} dir={direction} off_us={self.off_us}"
         )
 
         # update prev buttons for edge detection
@@ -113,7 +96,9 @@ class JoyToStep(Node):
 
 def main():
     rclpy.init()
-    rclpy.spin(JoyToStep())
+    node = JoyToStep()
+    rclpy.spin(node)
+    node.destroy_node()
     rclpy.shutdown()
 
 if __name__ == '__main__':
