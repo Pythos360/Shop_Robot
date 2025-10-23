@@ -77,7 +77,7 @@ class JoyToStep(Node):
             self.off_us = min(MAX_OFF_US, self.off_us + 100)   # slower
 
         # --- direction button (0/1) ---
-        direction = 1 if self._btn(msg.buttons, BTN_DIRECTION) else 0
+        
 
         # --- publish ---
         # data layout: [motor_id, vel, direction, off_us]
@@ -88,7 +88,7 @@ class JoyToStep(Node):
         self.pub.publish(cmd)
 
         self.get_logger().info(
-            f"motor={motor} (id={int(motor_id)}) vel={vel} dir={direction} off_us={self.off_us}"
+            f"motor={motor} vel={vel} off_us={self.off_us}"
         )
 
         # update prev buttons for edge detection
