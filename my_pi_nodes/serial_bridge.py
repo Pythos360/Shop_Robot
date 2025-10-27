@@ -5,24 +5,25 @@ import rclpy
 from rclpy.node import Node
 from std_msgs.msg import Float32MultiArray as MotorCmd
 
-LETTER = {0: 'A', 1: 'B', 2: 'C'}
+def fmt_val(x):
+    # compact float formatting without trailing junk
+    return f"{x:.6g}"
 
 class SerialBridge(Node):
     """
-    Bridges MotorCmd (Float32MultiArray) -> Arduino over serial.
+    Pass-through from MotorCmd (Float32MultiArray) -> Arduino over serial.
 
-    Accepts either:
-      len=3: [motor_id, signed_vel, off_us]
-      len=4: [motor_id, vel_mag, direction, off_us]
+    EXPECTED MotorCmd layout (len == 4):
+        [velA, velB, velC, off_us]
 
     Output to Arduino (param 'format'):
-      'kv'  (default): "motor=A vel=1 off_us=800\n"
-      'csv'           : "0,1,800\n"
+        'kv'  (default): "velA=... velB=... velC=... off_us=...\n"
+        'csv'          : "velA,velB,velC,off_us\n"
     """
     def __init__(self):
         super().__init__('serial_bridge')
 
-        # Parameters
+        # Params
         self.declare_parameter('port', '/dev/ttyUSB0')
         self.declare_parameter('baud', 115200)
         self.declare_parameter('rate_hz', 50.0)
@@ -39,54 +40,38 @@ class SerialBridge(Node):
 
         # Serial
         self.ser = serial.Serial(port, baud, timeout=0.02)
-        time.sleep(2.0)  # allow Uno reset
+        time.sleep(2.0)  # let Arduino reset
         self.get_logger().info(f"Opened {port} @ {baud} (format={self.format})")
 
-        # Latest cmd
+        # Last packet
         self.last_cmd = None
 
         # ROS I/O
-        self.sub = self.create_subscription(MotorCmd, 'motor_cmd', self.on_cmd, 10)
+        self.sub = self.create_subscription(MotorCmd, 'motor_cmd', self.on_cmd, 50)
         self.timer = self.create_timer(1.0 / rate, self.tick)
 
     def on_cmd(self, msg: MotorCmd):
         data = list(msg.data)
-        if len(data) not in (3, 4):
-            self.get_logger().warn(f"motor_cmd has {len(data)} elems; need 3 or 4. Ignoring.")
+        if len(data) != 4:
+            self.get_logger().warn(f"motor_cmd has {len(data)} elems; need exactly 4: [velA, velB, velC, off_us]. Ignoring.")
             return
         self.last_cmd = data
 
     def tick(self):
         if self.last_cmd is None:
             return
-
         try:
-            data = self.last_cmd
+            velA, velB, velC, off_us = self.last_cmd
 
-            if len(data) == 4:
-                # [motor_id, vel_mag, direction, off_us]
-                velA  = int(round(data[0]))
-                velB   = int(round(data[1]))        # 0 or 1
-                velC = int(round(data[2]))        # -1,0,+1
-                off_us    = int(round(data[3]))
-                signed_vel = max(-1, min(1, vel_mag * direction))
-            else:
-                # len==3 -> [motor_id, signed_vel, off_us]
-                motor_id   = int(round(data[0]))
-                signed_vel = int(round(data[1]))       # -1,0,+1
-                off_us     = int(round(data[2]))
-                # normalize just in case
-                if signed_vel < -1: signed_vel = -1
-                if signed_vel >  1: signed_vel =  1
-
-            # Build line for Arduino
             if self.format == 'csv':
-                # "0,1,800"
-                line = f"{motor_id},{signed_vel},{off_us}\n"
+                line = f"{fmt_val(velA)},{fmt_val(velB)},{fmt_val(velC)},{fmt_val(off_us)}\n"
             else:
-                # "motor=A vel=1 off_us=800"
-                motor_letter = LETTER.get(motor_id, 'A')
-                line = f"motorA={velA} motorB={velB} motorC={velC} off_us={off_us}\n"
+                line = (
+                    f"velA={fmt_val(velA)} "
+                    f"velB={fmt_val(velB)} "
+                    f"velC={fmt_val(velC)} "
+                    f"off_us={fmt_val(off_us)}\n"
+                )
 
             self.ser.write(line.encode('ascii'))
             self.get_logger().info(f"Sent: {line.strip()}")
