@@ -65,9 +65,9 @@ class SerialBridge(Node):
 
             if len(data) == 4:
                 # [motor_id, vel_mag, direction, off_us]
-                motor_id  = int(round(data[0]))
-                vel_mag   = int(round(data[1]))        # 0 or 1
-                direction = int(round(data[2]))        # -1,0,+1
+                velA  = int(round(data[0]))
+                velB   = int(round(data[1]))        # 0 or 1
+                velC = int(round(data[2]))        # -1,0,+1
                 off_us    = int(round(data[3]))
                 signed_vel = max(-1, min(1, vel_mag * direction))
             else:
@@ -86,7 +86,7 @@ class SerialBridge(Node):
             else:
                 # "motor=A vel=1 off_us=800"
                 motor_letter = LETTER.get(motor_id, 'A')
-                line = f"motor={motor_letter} vel={signed_vel} off_us={off_us}\n"
+                line = f"motorA={velA} motorB={velB} motorC={velC} off_us={off_us}\n"
 
             self.ser.write(line.encode('ascii'))
             self.get_logger().info(f"Sent: {line.strip()}")

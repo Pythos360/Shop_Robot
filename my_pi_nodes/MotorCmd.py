@@ -8,7 +8,7 @@ BTN_SPEED_UP   = 4  # faster
 
 AXIS_A = 0
 AXIS_B = 1
-AXIS_C = 2
+AXIS_C = 3
 
 MIN_OFF_US = 100
 MAX_OFF_US = 5000
