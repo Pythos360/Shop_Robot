@@ -1,69 +1,92 @@
-# my_pi_nodes/MotorCmd.py
+# my_pi_nodes/delta_control.py
+import math
+import numpy as np
+
 import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import Joy
 from std_msgs.msg import Float32MultiArray as MotorCmd
 
-BTN_SPEED_DOWN = 5  # slower
-BTN_SPEED_UP   = 4  # faster
+from Control import dynamics  # your dynamics class, including FK/Jacobian
 
-AXIS_A = 0
-AXIS_B = 1
-AXIS_C = 3
+MAX_TIP_SPEED = 50.0   # mm/s (tune)
+MAX_QDOT      = 60.0   # deg/s (tune)
+BASE_OFF_US   = 2000.0 # starting "slow" speed (tune)
 
-MIN_OFF_US = 100
-MAX_OFF_US = 5000
-DEADBAND   = 0.05
-
-def vel_from_axis(x: float) -> int:
-    if x >  DEADBAND: return +1
-    if x < -DEADBAND: return -1
-    return 0
-
-class JoyToStep(Node):
+class DeltaControl(Node):
     def __init__(self):
-        super().__init__('joy_to_step')
-        self.pub = self.create_publisher(MotorCmd, 'motor_cmd', 10)
-        self.sub = self.create_subscription(Joy, 'joy', self.on_joy, 10)
+        super().__init__('delta_control')
 
-        self.off_us = 2800
-        self.prev_buttons = []  # needed for edge detection
+        # --- state ---
+        # find a valid initial theta via IK for some nominal pose
+        thetas0 = np.array([0.0, 0.0, 0.0])
+        self.ctrl = dynamics(thetas0)
+        self.last_joy = Joy()
 
-    def _axis(self, axes, i):
-        return axes[i] if i < len(axes) else 0.0
-
-    def _rose(self, buttons, i):
-        prev = self.prev_buttons[i] if i < len(self.prev_buttons) else 0
-        now  = 1 if (i < len(buttons) and buttons[i] == 1) else 0
-        return prev == 0 and now == 1
-
-    def on_joy(self, msg: Joy):
-        # Read three axes -> three signed velocities (-1,0,+1)
-        velA = vel_from_axis(self._axis(msg.axes, AXIS_A))
-        velB = vel_from_axis(self._axis(msg.axes, AXIS_B))
-        velC = vel_from_axis(self._axis(msg.axes, AXIS_C))
-
-        # Speed up/down on rising edges
-        if self._rose(msg.buttons, BTN_SPEED_UP):
-            self.off_us = max(MIN_OFF_US, self.off_us - 100)
-        if self._rose(msg.buttons, BTN_SPEED_DOWN):
-            self.off_us = min(MAX_OFF_US, self.off_us + 100)
-
-        # Publish one message with exactly FOUR elements
-        m = MotorCmd()
-        m.data = [float(velA), float(velB), float(velC), float(self.off_us)]
-        self.pub.publish(m)
-
-        self.get_logger().info(
-            f"velA={velA} velB={velB} velC={velC} off_us={self.off_us}"
+        # --- ROS I/O ---
+        self.sub_joy = self.create_subscription(
+            Joy, 'joy', self.on_joy, 10
+        )
+        self.pub_motor = self.create_publisher(
+            MotorCmd, 'motor_cmd', 10
         )
 
-        # Update edge state
-        self.prev_buttons = list(msg.buttons)
+        # control loop at 50 Hz
+        self.dt = 0.02
+        self.timer = self.create_timer(self.dt, self.on_timer)
+
+    def on_joy(self, msg: Joy):
+        self.last_joy = msg
+
+    def joy_to_tip_vel(self) -> np.ndarray:
+        axes = self.last_joy.axes if self.last_joy.axes else [0.0]*4
+
+        # Example mapping:
+        # Left stick X -> x velocity, left stick Y -> y velocity, right stick Y -> z
+        ax_x = axes[0]    # [-1..1]
+        ax_y = axes[1]
+        ax_z = axes[3] if len(axes) > 3 else 0.0
+
+        vx = MAX_TIP_SPEED * ax_x
+        vy = MAX_TIP_SPEED * ax_y
+        vz = MAX_TIP_SPEED * ax_z
+
+        return np.array([vx, vy, vz], dtype=float)
+
+    def on_timer(self):
+        # 1) Desired tip velocity from joystick
+        v = self.joy_to_tip_vel()   # mm/s
+
+        # If joystick centered, stop:
+        if np.linalg.norm(v) < 1e-3:
+            cmd = MotorCmd()
+            cmd.data = [0.0, 0.0, 0.0, BASE_OFF_US]
+            self.pub_motor.publish(cmd)
+            return
+
+        # 2) Compute qdot via your Jacobian-based method
+        qdot = self.ctrl.qdot_from_v(v)   # you'll add this method, or reuse qdot()
+
+        # 3) Limit qdot
+        qdot = np.clip(qdot, -MAX_QDOT, MAX_QDOT)
+
+        # 4) Normalize to [-1, 1] for each motor
+        vel = qdot / MAX_QDOT
+
+        # 5) Integrate thetas so our model keeps up (open-loop)
+        self.ctrl.thetas = self.ctrl.thetas + qdot * self.dt
+
+        # 6) Build MotorCmd for SerialBridge: [velA, velB, velC, off_us]
+        m = MotorCmd()
+        m.data = [float(vel[0]), float(vel[1]), float(vel[2]), float(BASE_OFF_US)]
+        self.pub_motor.publish(m)
+
+        # optional: log at low rate
+        # self.get_logger().info(f"qdot={qdot}, vel={vel}")
 
 def main():
     rclpy.init()
-    node = JoyToStep()
+    node = DeltaControl()
     rclpy.spin(node)
     node.destroy_node()
     rclpy.shutdown()
