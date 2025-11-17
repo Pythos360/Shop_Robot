@@ -260,13 +260,13 @@ class dynamics:
     
     def qdot_from_v(self, v, gain=1.0):
         # Get joystick axes (assume first three are x,y,z directions)
-        velocities = np.array(controller.pullxyz(), dtype=float)[:3]
+        
 
         # Deadzone
-        velocities[np.abs(velocities) < 0.1] = 0.0
+        v[np.abs(v) < 0.1] = 0.0
 
         # Desired tip velocity in mm/s
-        v = velocities * gain
+        v = v * gain
 
         # Jacobian at current joint configuration
         J = self.numJ()
