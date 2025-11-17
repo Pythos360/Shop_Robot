@@ -7,7 +7,7 @@ from rclpy.node import Node
 from sensor_msgs.msg import Joy
 from std_msgs.msg import Float32MultiArray as MotorCmd
 
-from Control import dynamics  # your dynamics class, including FK/Jacobian
+from .Control import dynamics  # your dynamics class, including FK/Jacobian
 
 MAX_TIP_SPEED = 50.0   # mm/s (tune)
 MAX_QDOT      = 60.0   # deg/s (tune)
