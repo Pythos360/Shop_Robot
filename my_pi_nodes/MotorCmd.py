@@ -10,7 +10,7 @@ from std_msgs.msg import Float32MultiArray as MotorCmd
 from .Control import dynamics  # your dynamics class, including FK/Jacobian
 
 MAX_TIP_SPEED = 50.0   # mm/s (tune)
-MAX_QDOT      = 60.0   # deg/s (tune)
+MAX_QDOT      = 3   # deg/s (tune)
 BASE_OFF_US   = 2000.0 # starting "slow" speed (tune)
 
 class DeltaControl(Node):
@@ -45,7 +45,7 @@ class DeltaControl(Node):
         # Left stick X -> x velocity, left stick Y -> y velocity, right stick Y -> z
         ax_x = axes[0]    # [-1..1]
         ax_y = axes[1]
-        ax_z = axes[3] if len(axes) > 3 else 0.0
+        ax_z = axes[4] if len(axes) > 3 else 0.0
 
         vx = MAX_TIP_SPEED * ax_x
         vy = MAX_TIP_SPEED * ax_y
@@ -58,7 +58,7 @@ class DeltaControl(Node):
         v = self.joy_to_tip_vel()   # mm/s
 
         # If joystick centered, stop:
-        if np.linalg.norm(v) < 1e-3:
+        if np.linalg.norm(v) < 1e-1:
             cmd = MotorCmd()
             cmd.data = [0.0, 0.0, 0.0, BASE_OFF_US]
             self.pub_motor.publish(cmd)
