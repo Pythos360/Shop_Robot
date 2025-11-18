@@ -56,7 +56,7 @@ class DeltaControl(Node):
     def on_timer(self):
         # 1) Desired tip velocity from joystick
         v = self.joy_to_tip_vel()   # mm/s
-
+        v[np.abs(v) < 0.1] = 0.0
         # If joystick centered, stop:
         if np.linalg.norm(v) < 1e-1:
             cmd = MotorCmd()
@@ -68,6 +68,7 @@ class DeltaControl(Node):
         qdot = self.ctrl.qdot_from_v(v)   # you'll add this method, or reuse qdot()
 
         # 3) Limit qdot
+        
         qdot = np.clip(qdot, -MAX_QDOT, MAX_QDOT)
 
         # 4) Normalize to [-1, 1] for each motor
@@ -75,6 +76,7 @@ class DeltaControl(Node):
 
         # 5) Integrate thetas so our model keeps up (open-loop)
         self.ctrl.thetas = self.ctrl.thetas + qdot * self.dt
+        print(self.ctrl.thetas)
 
         # 6) Build MotorCmd for SerialBridge: [velA, velB, velC, off_us]
         m = MotorCmd()
@@ -90,6 +92,7 @@ def main():
     rclpy.spin(node)
     node.destroy_node()
     rclpy.shutdown()
+
 
 if __name__ == '__main__':
     main()
