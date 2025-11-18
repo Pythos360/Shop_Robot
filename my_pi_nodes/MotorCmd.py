@@ -9,16 +9,22 @@ from std_msgs.msg import Float32MultiArray as MotorCmd
 
 from .Control import dynamics  # your dynamics class, including FK/Jacobian
 
-MAX_TIP_SPEED = 50.0   # mm/s (tune)
-MAX_QDOT      = 3   # deg/s (tune)
-BASE_OFF_US   = 2000.0 # starting "slow" speed (tune)
+# --- hardware / timing constants ---
+DEG_PER_STEP = 0.09        # deg per motor step (given)
+ON_US        = 5.0         # high time for step pulse
+OFF_US_MIN   = 2000.0      # fastest (smallest delay)
+OFF_US_MAX   = 2800.0      # slowest (largest delay)
+
+# max physical step rate (steps/s) at OFF_US_MIN
+MAX_STEP_FREQ = 1e6 / (ON_US + OFF_US_MIN)     # ~ 499 steps/s
+# corresponding max joint speed (deg/s)
+MAX_QDOT      = MAX_STEP_FREQ * DEG_PER_STEP   # ~ 45 deg/s
 
 class DeltaControl(Node):
     def __init__(self):
         super().__init__('delta_control')
 
         # --- state ---
-        # find a valid initial theta via IK for some nominal pose
         thetas0 = np.array([0.0, 0.0, 0.0])
         self.ctrl = dynamics(thetas0)
         self.last_joy = Joy()
@@ -39,13 +45,13 @@ class DeltaControl(Node):
         self.last_joy = msg
 
     def joy_to_tip_vel(self) -> np.ndarray:
-        axes = self.last_joy.axes if self.last_joy.axes else [0.0]*4
+        axes = self.last_joy.axes if self.last_joy.axes else [0.0]*6
 
         # Example mapping:
         # Left stick X -> x velocity, left stick Y -> y velocity, right stick Y -> z
         ax_x = axes[0]    # [-1..1]
         ax_y = axes[1]
-        ax_z = axes[4] if len(axes) > 5 else 0.0
+        ax_z = axes[4] if len(axes) > 4 else 0.0
 
         vx =  ax_x
         vy = -ax_y
@@ -55,37 +61,50 @@ class DeltaControl(Node):
 
     def on_timer(self):
         # 1) Desired tip velocity from joystick
-        v = self.joy_to_tip_vel()   # mm/s
+        v = self.joy_to_tip_vel()   # “joystick units”
         v[np.abs(v) < 0.1] = 0.0
-        # If joystick centered, stop:
-        if np.linalg.norm(v) < 1e-1:
-            cmd = MotorCmd()
-            cmd.data = [0.0, 0.0, 0.0, BASE_OFF_US]
-            self.pub_motor.publish(cmd)
+
+        # If joystick centered, send "stop" to all motors
+        if np.linalg.norm(v) < 1e-3:
+            msg = MotorCmd()
+            msg.data = [0.0, 0.0, 0.0]
+            self.pub_motor.publish(msg)
             return
         
-        # 2) Compute qdot via your Jacobian-based method
-        qdot = self.ctrl.qdot_from_v(v)   # you'll add this method, or reuse qdot()
+        # 2) Compute qdot via your Jacobian-based method (deg/s)
+        qdot = self.ctrl.qdot_from_v(v)
 
-        # 3) Limit qdot
-        
+        # 3) Limit qdot to physical range
         qdot = np.clip(qdot, -MAX_QDOT, MAX_QDOT)
 
-        # 4) Normalize to [-1, 1] for each motor
-        vel = qdot / MAX_QDOT
-
-        # 5) Integrate thetas so our model keeps up (open-loop)
+        # 4) Integrate thetas so our model keeps up (open-loop)
         self.ctrl.thetas = self.ctrl.thetas + qdot * self.dt
         position = self.ctrl.fk(self.ctrl.thetas)
-        print(f"This is the Thetas {self.ctrl.thetas} and the position is {position}")
+        print(f"Thetas: {self.ctrl.thetas}, position: {position}")
 
-        # 6) Build MotorCmd for SerialBridge: [velA, velB, velC, off_us]
+        # 5) Map qdot -> signed off_us for each motor
+        scaled = []
+        for qd in qdot:
+            if abs(qd) < 1e-3:
+                # treat very small speeds as "stopped"
+                scaled.append(0.0)
+                continue
+
+            # normalize magnitude to [0, 1]
+            s = min(abs(qd) / MAX_QDOT, 1.0)
+
+            # map s in [0,1] -> off_us in [OFF_US_MAX, OFF_US_MIN]
+            # s=0 -> OFF_US_MAX (slow), s=1 -> OFF_US_MIN (fast)
+            off_us = OFF_US_MAX - s * (OFF_US_MAX - OFF_US_MIN)
+
+            # encode direction in the sign
+            val = math.copysign(off_us, qd)
+            scaled.append(val)
+
+        # 6) Build MotorCmd: [valA, valB, valC]
         m = MotorCmd()
-        m.data = [float(vel[0]), float(vel[1]), float(vel[2]), float(BASE_OFF_US)]
+        m.data = [float(scaled[0]), float(scaled[1]), float(scaled[2])]
         self.pub_motor.publish(m)
-
-        # optional: log at low rate
-        # self.get_logger().info(f"qdot={qdot}, vel={vel}")
 
 def main():
     rclpy.init()
