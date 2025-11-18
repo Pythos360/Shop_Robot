@@ -48,7 +48,7 @@ class DeltaControl(Node):
         ax_z = axes[4] if len(axes) > 5 else 0.0
 
         vx =  ax_x
-        vy = ax_y
+        vy = -ax_y
         vz =  ax_z
 
         return np.array([vx, vy, vz], dtype=float)
@@ -63,7 +63,7 @@ class DeltaControl(Node):
             cmd.data = [0.0, 0.0, 0.0, BASE_OFF_US]
             self.pub_motor.publish(cmd)
             return
-        print(v)
+        
         # 2) Compute qdot via your Jacobian-based method
         qdot = self.ctrl.qdot_from_v(v)   # you'll add this method, or reuse qdot()
 
@@ -76,7 +76,8 @@ class DeltaControl(Node):
 
         # 5) Integrate thetas so our model keeps up (open-loop)
         self.ctrl.thetas = self.ctrl.thetas + qdot * self.dt
-        
+        position = dynamics.fk(self.ctrl.thetas)
+        print(position)
 
         # 6) Build MotorCmd for SerialBridge: [velA, velB, velC, off_us]
         m = MotorCmd()
