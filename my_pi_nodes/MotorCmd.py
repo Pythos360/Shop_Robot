@@ -39,13 +39,13 @@ class DeltaControl(Node):
         self.last_joy = msg
 
     def joy_to_tip_vel(self) -> np.ndarray:
-        axes = self.last_joy.axes if self.last_joy.axes else [0.0]*4
+        axes = self.last_joy.axes if self.last_joy.axes 
 
         # Example mapping:
         # Left stick X -> x velocity, left stick Y -> y velocity, right stick Y -> z
         ax_x = axes[0]    # [-1..1]
         ax_y = axes[1]
-        ax_z = axes[4] if len(axes) > 3 else 0.0
+        ax_z = axes[4] if len(axes) > 5 else 0.0
 
         vx = MAX_TIP_SPEED * ax_x
         vy = MAX_TIP_SPEED * ax_y
