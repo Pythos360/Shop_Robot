@@ -56,24 +56,32 @@ class SerialBridge(Node):
             return
 
         try:
-            # Arduino expects: "cmdA,cmdB,cmdC\n"
-            line = f"{fmt_val(data[0])},{fmt_val(data[1])},{fmt_val(data[2])}\n"
-            self.ser.write(line.encode('ascii'))
+            # Convert to ints so Arduino can parse with %ld,%ld,%ld
+            a = int(round(float(data[0])))
+            b = int(round(float(data[1])))
+            c = int(round(float(data[2])))
 
-            # You can change this to .debug if the spam is too much
-            self.get_logger().info(f"Sent: {line.strip()}")
+            # Arduino expects CSV: "cmdA,cmdB,cmdC\n"
+            line = f"{a},{b},{c}\n"
+            self.ser.write(line.encode('ascii'))
+            # self.get_logger().info(f"Sent: {line.strip()}")
+
+            # READ ANY ARDUINO OUTPUT HERE
+            incoming = self.ser.readline().decode(errors='ignore').strip()
+            if incoming:
+                self.get_logger().info(f"Arduino: {incoming}")
 
         except Exception as e:
             self.get_logger().error(f"Serial write error: {e}")
 
-def main():
-    rclpy.init()
-    node = SerialBridge()
-    try:
-        rclpy.spin(node)
-    finally:
-        node.destroy_node()
-        rclpy.shutdown()
+    def main():
+        rclpy.init()
+        node = SerialBridge()
+        try:
+            rclpy.spin(node)
+        finally:
+            node.destroy_node()
+            rclpy.shutdown()
 
-if __name__ == '__main__':
-    main()
+    if __name__ == '__main__':
+        main()
