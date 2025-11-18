@@ -47,9 +47,9 @@ class DeltaControl(Node):
         ax_y = axes[1]
         ax_z = axes[4] if len(axes) > 5 else 0.0
 
-        vx = MAX_TIP_SPEED * ax_x
-        vy = MAX_TIP_SPEED * ax_y
-        vz = MAX_TIP_SPEED * ax_z
+        vx =  ax_x
+        vy = ax_y
+        vz =  ax_z
 
         return np.array([vx, vy, vz], dtype=float)
 
