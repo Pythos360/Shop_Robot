@@ -76,8 +76,8 @@ class DeltaControl(Node):
 
         # 5) Integrate thetas so our model keeps up (open-loop)
         self.ctrl.thetas = self.ctrl.thetas + qdot * self.dt
-        position = dynamics.fk(self, self.ctrl.thetas)
-        print(position)
+        position = self.ctrl.fk(self.ctrl.thetas)
+        print(f"This is the Thetas {self.ctrl.thetas} and the position is {position}")
 
         # 6) Build MotorCmd for SerialBridge: [velA, velB, velC, off_us]
         m = MotorCmd()
