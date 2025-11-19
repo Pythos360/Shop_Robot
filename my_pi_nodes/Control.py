@@ -258,7 +258,7 @@ class dynamics:
 
         return self.J
     
-    def qdot_from_v(self, v, gain=1.0):
+    def qdot_from_v(self, v, gain=0.5):
         # Get joystick axes (assume first three are x,y,z directions)
         
 

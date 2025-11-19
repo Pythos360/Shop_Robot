@@ -105,6 +105,7 @@ class DeltaControl(Node):
         m = MotorCmd()
         m.data = [float(scaled[0]), float(scaled[1]), float(scaled[2])]
         self.pub_motor.publish(m)
+        
 
 def main():
     rclpy.init()
