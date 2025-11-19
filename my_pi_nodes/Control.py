@@ -275,7 +275,7 @@ class dynamics:
         qd = np.linalg.pinv(J) @ v
         return qd
     
-    def step(self, dt, gain=.005):
+    def step(self, dt, gain=.0000005):
         qd = self.qdot(gain=gain)   # deg/s
         self.thetas = self.thetas + qd * dt
         return self.thetas
