@@ -258,7 +258,7 @@ class dynamics:
 
         return self.J
     
-    def qdot_from_v(self, v, gain=0.5):
+    def qdot_from_v(self, v, gain=1):
         # Get joystick axes (assume first three are x,y,z directions)
         
 
@@ -275,7 +275,7 @@ class dynamics:
         qd = np.linalg.pinv(J) @ v
         return qd
     
-    def step(self, dt, gain=1.0):
+    def step(self, dt, gain=.5):
         qd = self.qdot(gain=gain)   # deg/s
         self.thetas = self.thetas + qd * dt
         return self.thetas
