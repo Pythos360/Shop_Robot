@@ -55,7 +55,7 @@ class DeltaControl(Node):
 
         vx =  ax_x
         vy = -ax_y
-        vz =  ax_z
+        vz =  -ax_z
 
         return np.array([vx, vy, vz], dtype=float)
 
