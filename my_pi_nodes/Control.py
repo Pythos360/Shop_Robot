@@ -268,30 +268,32 @@ class dynamics:
         # Deadzone
         v[np.abs(v) < 0.1] = 0.0
 
-        # Scale joystick to mm/s
+        # Desired tip velocity in mm/s
         v = v * gain
 
-        # --- Workspace limiting in Cartesian space ---
-        pos = self.position()  # [x,y,z]
-        print(pos)
-        for i in range(3):     # 0:x, 1:y, 2:z
-            lower, upper = self.limits[i]
-            span = upper - lower
-            if span <= 0:
-                continue
-
-            # If we're close to upper bound and commanding + velocity, zero that axis
-            if v[i] > 0 and (upper - pos[i]) < 0.05 * span:
-                v[i] = 0.0
-            # If we're close to lower bound and commanding - velocity, zero that axis
-            if v[i] < 0 and (pos[i] - lower) < 0.05 * span:
-                v[i] = 0.0
-
-        # --- Map remaining Cartesian velocity to joint velocities ---
+        # Jacobian at current joint configuration
         J = self.numJ()
-        qd = np.linalg.pinv(J) @ v  # deg/s
 
+        # Damped least-squares inverse Jacobian for robustness (see next section)
+        lam = 0.01  # tuning parameter
+        JT = J.T
+        qd = JT @ np.linalg.inv(J @ JT + (lam ** 2) * np.eye(3)) @ v
+
+        # Optional: workspace guarding in Cartesian space
+        pos = self.position()   # [x,y,z]
+        for k in range(3):
+            lower, upper = self.limits[k]
+            span = (upper - lower)
+            # If we're within 5% of the min/max in this coordinate, project v away
+            if abs(pos[k] - upper) < 0.05 * span and v[k] > 0:
+                v[k] = 0.0
+            if abs(pos[k] - lower) < 0.05 * span and v[k] < 0:
+                v[k] = 0.0
+
+        # Recompute qd after potentially modifying v:
+        qd = JT @ np.linalg.inv(J @ JT + (lam ** 2) * np.eye(3)) @ v
         return qd
+
     
     def step(self, dt, gain=.0000005):
         qd = self.qdot(gain=gain)   # deg/s
