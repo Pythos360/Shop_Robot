@@ -273,6 +273,7 @@ class dynamics:
 
         # --- Workspace limiting in Cartesian space ---
         pos = self.position()  # [x,y,z]
+        print(pos)
         for i in range(3):     # 0:x, 1:y, 2:z
             lower, upper = self.limits[i]
             span = upper - lower
