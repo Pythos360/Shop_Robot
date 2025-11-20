@@ -12,7 +12,7 @@ from .Control import dynamics  # your dynamics class, including FK/Jacobian
 # --- hardware / timing constants ---
 DEG_PER_STEP = 0.09        # deg per motor step (given)
 ON_US        = 5.0         # high time for step pulse
-OFF_US_MIN   = 2000.0      # fastest (smallest delay)
+OFF_US_MIN   = 2500.0     # fastest (smallest delay)
 OFF_US_MAX   = 2800.0      # slowest (largest delay)
 
 # max physical step rate (steps/s) at OFF_US_MIN
@@ -75,7 +75,10 @@ class DeltaControl(Node):
         qdot = self.ctrl.qdot_from_v(v)
 
         # 3) Limit qdot to physical range
-        qdot = np.clip(qdot, -MAX_QDOT, MAX_QDOT)
+        max_abs = np.max(np.abs(qdot))
+        if max_abs > MAX_QDOT:
+            qdot = qdot * (MAX_QDOT / max_abs)
+
 
         # 4) Integrate thetas so our model keeps up (open-loop)
         self.ctrl.thetas = self.ctrl.thetas + qdot * self.dt
