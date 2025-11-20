@@ -234,45 +234,62 @@ class dynamics:
     def __init__(self, thetas_init):
         self.thetas = np.array(thetas_init, dtype=float)  # deg
         self.J = np.zeros((3, 3), dtype=float)
+        # [x_min, x_max], [y_min, y_max], [z_min, z_max] in mm
+        self.limits = np.array([
+            [-160.8, 160.8],
+            [-160.8, 160.8],
+            [-370.0, -100.0],
+        ])
 
     def fk(self, thetas_deg):
-        """[θ1,θ2,θ3] in deg → [x,y,z] in mm."""
         t = np.asarray(thetas_deg, dtype=float)
         status, x0, y0, z0 = delta_calcForward(t[0], t[1], t[2])
         if status != 0:
             raise ValueError(f"FK failed for {t}")
         return np.array([x0, y0, z0], dtype=float)
 
-    def numJ(self, h=0.1):
-        """Numerical Jacobian ∂x/∂θ using central differences."""
-        theta = np.array(self.thetas, dtype=float)
+    def position(self):
+        """Current tip position [x,y,z] in mm."""
+        return self.fk(self.thetas)
 
+    def numJ(self, h=0.1):
+        theta = np.array(self.thetas, dtype=float)
         for i in range(3):
             dtheta = np.zeros(3)
             dtheta[i] = h
-
             x_plus  = self.fk(theta + dtheta)
             x_minus = self.fk(theta - dtheta)
-
             self.J[:, i] = (x_plus - x_minus) / (2.0 * h)
-
         return self.J
-    
+
     def qdot_from_v(self, v, gain=200):
-        # Get joystick axes (assume first three are x,y,z directions)
-        
+        v = np.asarray(v, dtype=float)
 
         # Deadzone
         v[np.abs(v) < 0.1] = 0.0
 
-        # Desired tip velocity in mm/s
+        # Scale joystick to mm/s
         v = v * gain
 
-        # Jacobian at current joint configuration
-        J = self.numJ()
+        # --- Workspace limiting in Cartesian space ---
+        pos = self.position()  # [x,y,z]
+        for i in range(3):     # 0:x, 1:y, 2:z
+            lower, upper = self.limits[i]
+            span = upper - lower
+            if span <= 0:
+                continue
 
-        # Joint velocities in deg/s (use pinv for safety)
-        qd = np.linalg.pinv(J) @ v
+            # If we're close to upper bound and commanding + velocity, zero that axis
+            if v[i] > 0 and (upper - pos[i]) < 0.05 * span:
+                v[i] = 0.0
+            # If we're close to lower bound and commanding - velocity, zero that axis
+            if v[i] < 0 and (pos[i] - lower) < 0.05 * span:
+                v[i] = 0.0
+
+        # --- Map remaining Cartesian velocity to joint velocities ---
+        J = self.numJ()
+        qd = np.linalg.pinv(J) @ v  # deg/s
+
         return qd
     
     def step(self, dt, gain=.0000005):
@@ -283,3 +300,5 @@ class dynamics:
     def position(self):
         """Convenience: current tip position [x,y,z] in mm."""
         return self.fk(self.thetas)
+    
+    
