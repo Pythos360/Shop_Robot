@@ -6,13 +6,14 @@ import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import Joy
 from std_msgs.msg import Float32MultiArray as MotorCmd
+from geometry_msgs.msg import Point   # <-- NEW
 
 from .Control import dynamics  # your dynamics class, including FK/Jacobian
 
 # --- hardware / timing constants ---
 DEG_PER_STEP = 0.09        # deg per motor step (given)
 ON_US        = 5.0         # high time for step pulse
-OFF_US_MIN   = 2500.0     # fastest (smallest delay)
+OFF_US_MIN   = 2500.0      # fastest (smallest delay)
 OFF_US_MAX   = 2800.0      # slowest (largest delay)
 
 # max physical step rate (steps/s) at OFF_US_MIN
@@ -37,6 +38,11 @@ class DeltaControl(Node):
             MotorCmd, 'motor_cmd', 10
         )
 
+        # NEW: publisher for tip position
+        self.pub_tip = self.create_publisher(
+            Point, 'tip_position', 10
+        )
+
         # control loop at 50 Hz
         self.dt = 0.02
         self.timer = self.create_timer(self.dt, self.on_timer)
@@ -55,7 +61,7 @@ class DeltaControl(Node):
 
         vx =  ax_x
         vy = -ax_y
-        vz =  -ax_z
+        vz = -ax_z
 
         return np.array([vx, vy, vz], dtype=float)
 
@@ -69,6 +75,10 @@ class DeltaControl(Node):
             msg = MotorCmd()
             msg.data = [0.0, 0.0, 0.0]
             self.pub_motor.publish(msg)
+
+            # Still useful to publish current tip position (not moving)
+            position = self.ctrl.fk(self.ctrl.thetas)
+            self.publish_tip_position(position)
             return
         
         # 2) Compute qdot via your Jacobian-based method (deg/s)
@@ -79,11 +89,13 @@ class DeltaControl(Node):
         if max_abs > MAX_QDOT:
             qdot = qdot * (MAX_QDOT / max_abs)
 
-
         # 4) Integrate thetas so our model keeps up (open-loop)
         self.ctrl.thetas = self.ctrl.thetas + qdot * self.dt
         position = self.ctrl.fk(self.ctrl.thetas)
         print(f"Thetas: {self.ctrl.thetas}, position: {position}")
+
+        # --- NEW: publish tip position ---
+        self.publish_tip_position(position)
 
         # 5) Map qdot -> signed off_us for each motor
         scaled = []
@@ -108,7 +120,15 @@ class DeltaControl(Node):
         m = MotorCmd()
         m.data = [float(scaled[0]), float(scaled[1]), float(scaled[2])]
         self.pub_motor.publish(m)
-        
+
+    def publish_tip_position(self, position: np.ndarray):
+        """Publish tip position as geometry_msgs/Point."""
+        p = Point()
+        # assuming fk returns [x, y, z]
+        p.x = float(position[0])
+        p.y = float(position[1])
+        p.z = float(position[2])
+        self.pub_tip.publish(p)
 
 def main():
     rclpy.init()
@@ -116,7 +136,6 @@ def main():
     rclpy.spin(node)
     node.destroy_node()
     rclpy.shutdown()
-
 
 if __name__ == '__main__':
     main()
