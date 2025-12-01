@@ -8,7 +8,7 @@ e  = 45   # end effector
 f  = 80   # base
 re = 272
 rf = 235
-
+            
 # trigonometric constants
 sqrt3  = math.sqrt(3.0)
 pi     = 3.141592653  # PI
@@ -270,7 +270,7 @@ class dynamics:
 
         # Desired tip velocity in mm/s
         v = v * gain
-
+        print(v)
         # Jacobian at current joint configuration
         J = self.numJ()
 
