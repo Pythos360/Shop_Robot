@@ -270,7 +270,7 @@ class dynamics:
 
         # Desired tip velocity in mm/s
         v = v * gain
-        print(v)
+        print(f"The Desired Tip Vel is {v}")
         # Jacobian at current joint configuration
         J = self.numJ()
 
