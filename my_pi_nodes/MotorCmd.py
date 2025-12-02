@@ -11,7 +11,7 @@ from geometry_msgs.msg import Point   # <-- NEW
 from .Control import dynamics  # your dynamics class, including FK/Jacobian
 
 # --- hardware / timing constants ---
-DEG_PER_STEP = 0.09        # deg per motor step (given)
+DEG_PER_STEP = 0.045        # deg per motor step (given)
 ON_US        = 5.0         # high time for step pulse
 OFF_US_MIN   = 2000.0    # fastest (smallest delay)
 OFF_US_MAX   = 2800.0      # slowest (largest delay)
