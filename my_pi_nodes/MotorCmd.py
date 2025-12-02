@@ -19,7 +19,7 @@ OFF_US_MAX   = 2800.0      # slowest (largest delay)
 # max physical step rate (steps/s) at OFF_US_MIN
 MAX_STEP_FREQ = 1e6 / (ON_US + OFF_US_MIN)     # ~ 499 steps/s
 # corresponding max joint speed (deg/s)
-MAX_QDOT      = MAX_STEP_FREQ * DEG_PER_STEP   # ~ 45 deg/s
+MAX_QDOT   =.4 *  MAX_STEP_FREQ * DEG_PER_STEP   # ~ 45 deg/s
 
 class DeltaControl(Node):
     def __init__(self):
