@@ -83,7 +83,7 @@ class DeltaControl(Node):
         
         # 2) Compute qdot via your Jacobian-based method (deg/s)
         qdot = self.ctrl.qdot_from_v(v)
-
+        print(f"Following is Qdot {qdot}")
         # 3) Limit qdot to physical range
         max_abs = np.max(np.abs(qdot))
         if max_abs > MAX_QDOT:
