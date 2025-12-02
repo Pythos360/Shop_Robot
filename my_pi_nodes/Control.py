@@ -273,9 +273,13 @@ class dynamics:
         print(f"The Desired Tip Vel is {v}")
         # Jacobian at current joint configuration
         J = self.numJ()
-
+        U, S, Vt = np.linalg.svd(J)
+        if S[-1] < 1e-6:
+            return np.zeros(3)
+        condJ = S[0] / S[-1]
         # Damped least-squares inverse Jacobian for robustness (see next section)
-        lam = 0.01  # tuning parameter
+        lam_base = 0.05   # base damping
+        lam = lam_base * (1.0 + max(0.0, (condJ - 5.0) / 5.0))
         JT = J.T
         qd = JT @ np.linalg.inv(J @ JT + (lam ** 2) * np.eye(3)) @ v
 
