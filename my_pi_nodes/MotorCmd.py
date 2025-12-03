@@ -8,7 +8,7 @@ from sensor_msgs.msg import Joy
 from std_msgs.msg import Float32MultiArray as MotorCmd
 from geometry_msgs.msg import Point   # <-- NEW
 
-from .Control import dynamics  # your dynamics class, including FK/Jacobian
+from .Control import dynamics, ctrl_mov  # your dynamics class, including FK/Jacobian
 
 # --- hardware / timing constants ---
 DEG_PER_STEP = 0.045        # deg per motor step (given)
@@ -46,9 +46,34 @@ class DeltaControl(Node):
         # control loop at 50 Hz
         self.dt = 0.02
         self.timer = self.create_timer(self.dt, self.on_timer)
+        # --- motion controller: position targets ---
+        self.mover = ctrl_mov(
+            self.ctrl,
+            kp=0.8,            # tune
+            max_tip_speed=30., # mm/s
+            tol=1.0            # mm tolerance
+        )
+
+        # subscribe to Cartesian move targets
+        self.sub_target = self.create_subscription(
+            Point,
+            'move_target',     # topic name
+            self.on_target,
+            10
+        )
+
+    def on_target(self, msg: Point):
+        target = np.array([msg.x, msg.y, msg.z], dtype=float)
+        self.get_logger().info(f"New move_target: {target}")
+        self.mover.set_target(target)
+
 
     def on_joy(self, msg: Joy):
         self.last_joy = msg
+
+        if len(msg.buttons) > 1 and msg.buttons[1]:
+            self.get_logger().info("Move cancelled by joystick button.")
+            self.mover.stop()
 
     def joy_to_tip_vel(self) -> np.ndarray:
         axes = self.last_joy.axes if self.last_joy.axes else [0.0]*6
@@ -66,42 +91,40 @@ class DeltaControl(Node):
         return np.array([vx, vy, vz], dtype=float)
 
     def on_timer(self):
-        # 1) Desired tip velocity from joystick
-        v = self.joy_to_tip_vel()   # “joystick units”
-        v[np.abs(v) < 0.1] = 0.0
+        # 0) Decide how to get qdot: mover vs joystick
+        if self.mover.active:
+            # Position-target mode: ignore joystick, follow target
+            qdot = self.mover.update(self.dt)
+        else:
+            # Joystick-velocity mode
+            v = self.joy_to_tip_vel()   # “joystick units”
+            v[np.abs(v) < 0.1] = 0.0
 
-        # If joystick centered, send "stop" to all motors
-        if np.linalg.norm(v) < 1e-3:
-            msg = MotorCmd()
-            msg.data = [0.0, 0.0, 0.0]
-            self.pub_motor.publish(msg)
+            # If joystick centered and no active mover: stop
+            if np.linalg.norm(v) < 1e-3:
+                qdot = np.zeros(3)
+            else:
+                # Jacobian-based mapping: v -> qdot (deg/s)
+                qdot = self.ctrl.qdot_from_v(v)
 
-            # Still useful to publish current tip position (not moving)
-            position = self.ctrl.fk(self.ctrl.thetas)
-            self.publish_tip_position(position)
-            return
-        
-        # 2) Compute qdot via your Jacobian-based method (deg/s)
-        qdot = self.ctrl.qdot_from_v(v)
-        print(f"Following is Qdot {qdot}")
-        # 3) Limit qdot to physical range
+        # 1) Limit qdot to physical range
         max_abs = np.max(np.abs(qdot))
-        if max_abs > MAX_QDOT:
+        if max_abs > MAX_QDOT and max_abs > 1e-6:
             qdot = qdot * (MAX_QDOT / max_abs)
 
-        # 4) Integrate thetas so our model keeps up (open-loop)
+        # 2) Integrate thetas so our model keeps up (open-loop)
         self.ctrl.thetas = self.ctrl.thetas + qdot * self.dt
         position = self.ctrl.fk(self.ctrl.thetas)
-        print(f"Thetas: {self.ctrl.thetas}, position: {position}")
+        print(f"Thetas: {self.ctrl.thetas}, position: {position}, qdot: {qdot}")
 
-        # --- NEW: publish tip position ---
+        # 3) Publish tip position
         self.publish_tip_position(position)
 
-        # 5) Map qdot -> signed off_us for each motor
+        # 4) Map qdot -> signed off_us for each motor
         scaled = []
         for qd in qdot:
+            # treat very small speeds as "stopped"
             if abs(qd) < 1e-3:
-                # treat very small speeds as "stopped"
                 scaled.append(0.0)
                 continue
 
@@ -116,10 +139,11 @@ class DeltaControl(Node):
             val = math.copysign(off_us, qd)
             scaled.append(val)
 
-        # 6) Build MotorCmd: [valA, valB, valC]
+        # 5) Build MotorCmd: [valA, valB, valC]
         m = MotorCmd()
         m.data = [float(scaled[0]), float(scaled[1]), float(scaled[2])]
         self.pub_motor.publish(m)
+
 
     def publish_tip_position(self, position: np.ndarray):
         """Publish tip position as geometry_msgs/Point."""

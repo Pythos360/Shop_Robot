@@ -309,3 +309,67 @@ class dynamics:
         return self.fk(self.thetas)
     
     
+
+
+class ctrl_mov:
+    """
+    Simple position controller for the delta robot.
+    Uses the existing 'dynamics' object (FK + Jacobian + qdot_from_v).
+    """
+    def __init__(self, ctrl, kp=1.0, max_tip_speed=40.0, tol=1.0):
+        """
+        ctrl : instance of your 'dynamics' class
+        kp   : proportional gain (mm/s per mm of error)
+        max_tip_speed : speed limit for tip (mm/s)
+        tol  : tolerance in mm to consider 'at target'
+        """
+        self.ctrl = ctrl
+        self.kp = kp
+        self.max_tip_speed = max_tip_speed
+        self.tol = tol
+
+        self.target = None      # Cartesian target [x, y, z]
+        self.active = False
+
+    def set_target(self, xyz):
+        """Set a new Cartesian target for the tip to move to."""
+        self.target = np.asarray(xyz, dtype=float)
+        self.active = True
+
+    def stop(self):
+        """Cancel motion."""
+        self.target = None
+        self.active = False
+
+    def update(self, dt):
+        """
+        Compute joint velocities qdot for this timestep.
+        Call this every control cycle.
+        Returns a np.array of shape (3,) in deg/s.
+        """
+        if not self.active or self.target is None:
+            return np.zeros(3)
+
+        # current Cartesian position
+        pos = self.ctrl.position()  # uses fk(self.thetas) internally
+
+        # error in Cartesian space
+        e = self.target - pos
+        dist = np.linalg.norm(e)
+
+        # close enough? then stop
+        if dist < self.tol:
+            self.stop()
+            return np.zeros(3)
+
+        # proportional control in Cartesian space
+        v = self.kp * e  # mm/s (desired tip velocity)
+
+        # limit tip speed
+        v_norm = np.linalg.norm(v)
+        if v_norm > self.max_tip_speed and v_norm > 1e-6:
+            v *= self.max_tip_speed / v_norm
+
+        # use your existing Jacobian-based mapping
+        qdot = self.ctrl.qdot_from_v(v)  # deg/s
+        return qdot
