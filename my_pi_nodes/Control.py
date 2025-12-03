@@ -277,6 +277,7 @@ class dynamics:
         if S[-1] < 1e-6:
             return np.zeros(3)
         condJ = S[0] / S[-1]
+        print(f"This is the Cond Number {condJ}")
         # Damped least-squares inverse Jacobian for robustness (see next section)
         lam_base = 0.1   # base damping
         lam = lam_base * (1.0 + max(0.0, (condJ - 5.0) / 5.0))
