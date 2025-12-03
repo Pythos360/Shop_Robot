@@ -297,6 +297,14 @@ class dynamics:
 
         # Recompute qd after potentially modifying v:
         qd = JT @ np.linalg.inv(J @ JT + (lam ** 2) * np.eye(3)) @ v
+        J = self.ctrl.numJ()
+        pos = self.ctrl.position()
+        print(
+            f"pos={pos}, "
+            f"condJ={condJ:.2f}, "
+            f"Jx={J[0, :]}, "
+        )
+
         return qd
 
     
