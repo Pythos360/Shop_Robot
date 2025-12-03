@@ -8,7 +8,7 @@ from sensor_msgs.msg import Joy
 from std_msgs.msg import Float32MultiArray as MotorCmd
 from geometry_msgs.msg import Point   # <-- NEW
 
-from .Control import dynamics, ctrl_mov  # your dynamics class, including FK/Jacobian
+from .Control import dynamics, ctrl_mov, theta_mov  # your dynamics class, including FK/Jacobian
 
 # --- hardware / timing constants ---
 DEG_PER_STEP = 0.045        # deg per motor step (given)
@@ -54,6 +54,12 @@ class DeltaControl(Node):
             tol=1.0            # mm tolerance
         )
 
+        self.theta_mover = theta_mov(
+            self.ctrl,
+            kp=2.0,
+            max_qdot=MAX_QDOT,   # use your existing physical limit
+            tol_deg=0.5
+        )
         # subscribe to Cartesian move targets
         self.sub_target = self.create_subscription(
             Point,
@@ -67,6 +73,14 @@ class DeltaControl(Node):
         self.get_logger().info(f"New move_target: {target}")
         self.mover.set_target(target)
 
+    def on_theta_target(self, msg: MotorCmd):
+        data = list(msg.data)
+        if len(data) != 3:
+            self.get_logger().warn(f"theta_target needs 3 elements, got {len(data)}")
+            return
+        target = np.array(data, dtype=float)
+        self.get_logger().info(f"New theta_target: {target}")
+        self.theta_mover.set_target(target)
 
     def on_joy(self, msg: Joy):
         self.last_joy = msg
@@ -91,58 +105,55 @@ class DeltaControl(Node):
         return np.array([vx, vy, vz], dtype=float)
 
     def on_timer(self):
-        # 0) Decide how to get qdot: mover vs joystick
-        if self.mover.active:
-            # Position-target mode: ignore joystick, follow target
+        # --- choose qdot source: theta_mover > mover > joystick ---
+        if self.theta_mover.active:
+            # Joint-space control
+            qdot = self.theta_mover.update(self.dt)
+
+        elif self.mover.active:
+            # Cartesian target control
             qdot = self.mover.update(self.dt)
+
         else:
             # Joystick-velocity mode
-            v = self.joy_to_tip_vel()   # “joystick units”
+            v = self.joy_to_tip_vel()
             v[np.abs(v) < 0.1] = 0.0
 
-            # If joystick centered and no active mover: stop
             if np.linalg.norm(v) < 1e-3:
-                qdot = np.zeros(3)
+                qdot = np.zeros(3, dtype=float)
             else:
-                # Jacobian-based mapping: v -> qdot (deg/s)
                 qdot = self.ctrl.qdot_from_v(v)
 
-        # 1) Limit qdot to physical range
+        # --- the rest of your existing on_timer stays the same ---
+        # 1) Limit qdot to physical range (MAX_QDOT)
         max_abs = np.max(np.abs(qdot))
         if max_abs > MAX_QDOT and max_abs > 1e-6:
             qdot = qdot * (MAX_QDOT / max_abs)
 
-        # 2) Integrate thetas so our model keeps up (open-loop)
+        # 2) Integrate thetas
         self.ctrl.thetas = self.ctrl.thetas + qdot * self.dt
         position = self.ctrl.fk(self.ctrl.thetas)
-        
+        print(f"Thetas: {self.ctrl.thetas}, position: {position}, qdot: {qdot}")
 
         # 3) Publish tip position
         self.publish_tip_position(position)
 
-        # 4) Map qdot -> signed off_us for each motor
+        # 4) Map qdot -> signed off_us (your existing mapping)
         scaled = []
         for qd in qdot:
-            # treat very small speeds as "stopped"
             if abs(qd) < 1e-3:
                 scaled.append(0.0)
                 continue
 
-            # normalize magnitude to [0, 1]
             s = min(abs(qd) / MAX_QDOT, 1.0)
-
-            # map s in [0,1] -> off_us in [OFF_US_MAX, OFF_US_MIN]
-            # s=0 -> OFF_US_MAX (slow), s=1 -> OFF_US_MIN (fast)
             off_us = OFF_US_MAX - s * (OFF_US_MAX - OFF_US_MIN)
-
-            # encode direction in the sign
             val = math.copysign(off_us, qd)
             scaled.append(val)
 
-        # 5) Build MotorCmd: [valA, valB, valC]
         m = MotorCmd()
         m.data = [float(scaled[0]), float(scaled[1]), float(scaled[2])]
         self.pub_motor.publish(m)
+
 
 
     def publish_tip_position(self, position: np.ndarray):

@@ -383,3 +383,61 @@ class ctrl_mov:
         # use your existing Jacobian-based mapping
         qdot = self.ctrl.qdot_from_v(v)  # deg/s
         return qdot
+
+
+class theta_mov:
+    """
+    Simple joint-space position controller.
+    Drives the joints toward desired thetas (in degrees).
+    """
+    def __init__(self, ctrl, kp=2.0, max_qdot=10.0, tol_deg=0.5):
+        """
+        ctrl     : your 'dynamics' instance (has .thetas in deg)
+        kp       : proportional gain (deg/s per deg error)
+        max_qdot : max joint speed magnitude (deg/s)
+        tol_deg  : infinity-norm tolerance in deg to consider 'at target'
+        """
+        self.ctrl = ctrl
+        self.kp = kp
+        self.max_qdot = max_qdot
+        self.tol_deg = tol_deg
+
+        self.target = None      # np.array([θ1, θ2, θ3]) in deg
+        self.active = False
+
+    def set_target(self, thetas_deg):
+        """Set a new joint-space target [θ1, θ2, θ3] in degrees."""
+        self.target = np.array(thetas_deg, dtype=float)
+        self.active = True
+
+    def stop(self):
+        """Cancel motion."""
+        self.target = None
+        self.active = False
+
+    def update(self, dt):
+        """
+        Compute qdot (deg/s) for this timestep.
+        Call this every control cycle.
+        """
+        if not self.active or self.target is None:
+            return np.zeros(3, dtype=float)
+
+        # current joint angles (deg)
+        th = self.ctrl.thetas
+        err = self.target - th
+
+        # if close enough in every joint, stop
+        if np.max(np.abs(err)) < self.tol_deg:
+            self.stop()
+            return np.zeros(3, dtype=float)
+
+        # simple P-control in joint space
+        qdot = self.kp * err  # deg/s
+
+        # joint speed limit
+        max_abs = np.max(np.abs(qdot))
+        if max_abs > self.max_qdot and max_abs > 1e-6:
+            qdot = qdot * (self.max_qdot / max_abs)
+
+        return qdot
