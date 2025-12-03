@@ -60,6 +60,15 @@ class DeltaControl(Node):
             max_qdot=MAX_QDOT,   # use your existing physical limit
             tol_deg=0.5
         )
+
+        # subscribe to joint theta targets (deg)
+        self.sub_theta_target = self.create_subscription(
+            MotorCmd,
+            'theta_target',
+            self.on_theta_target,
+            10
+        )
+
         # subscribe to Cartesian move targets
         self.sub_target = self.create_subscription(
             Point,
