@@ -3,9 +3,8 @@ import numpy as np
 
 
 # robot geometry
-# (look at pics above for explanation)
-e  = 45   # end effector
-f  = 80   # base
+e  = 45   
+f  = 80  
 re = 272
 rf = 235
             
@@ -19,8 +18,7 @@ sin30  = 0.5
 tan30  = 1.0 / sqrt3
 
 
-# forward kinematics: (theta1, theta2, theta3) -> (x0, y0, z0)
-# returned status: 0=OK, -1=non-existing position
+# forward kinematics
 def delta_calcForward(theta1: float, theta2: float, theta3: float):
     t = (f - e) * tan30 / 2.0
     dtr = pi / 180.0
@@ -60,10 +58,9 @@ def delta_calcForward(theta1: float, theta2: float, theta3: float):
     b = 2.0 * (a1 * b1 + a2 * (b2 - y1 * dnm) - z1 * dnm * dnm)
     c = (b2 - y1 * dnm) * (b2 - y1 * dnm) + b1 * b1 + dnm * dnm * (z1 * z1 - re * re)
 
-    # discriminant
     d = b * b - 4.0 * a * c
     if d < 0.0:
-        return -1, None, None, None  # non-existing point
+        return -1, None, None, None  
 
     z0 = -0.5 * (b + math.sqrt(d)) / a
     x0 = (a1 * z0 + b1) / dnm
@@ -72,8 +69,6 @@ def delta_calcForward(theta1: float, theta2: float, theta3: float):
 
 
 # inverse kinematics
-# helper function, calculates angle theta (for YZ-plane)
-# returned status: 0=OK, -1=non-existing position
 def delta_calcAngleYZ(x0: float, y0: float, z0: float):
     y1 = -0.5 * 0.57735 * f      # f/2 * tg 30
     y0 = y0 - 0.5 * 0.57735 * e  # shift center to edge
@@ -94,8 +89,7 @@ def delta_calcAngleYZ(x0: float, y0: float, z0: float):
     return 0, theta
 
 
-# inverse kinematics: (x0, y0, z0) -> (theta1, theta2, theta3)
-# returned status: 0=OK, -1=non-existing position
+# inverse kinematics:
 def delta_calcInverse(x0: float, y0: float, z0: float):
     theta1 = theta2 = theta3 = 0.0
 
@@ -130,8 +124,7 @@ class robotmodel:
         sin30  = 0.5
         tan30  = 1.0 / sqrt3
 
-    # forward kinematics: (theta1, theta2, theta3) -> (x0, y0, z0)
-# returned status: 0=OK, -1=non-existing position
+    # forward kinematics
     def delta_calcForward(self, theta1: float, theta2: float, theta3: float):
         t = (f - e) * tan30 / 2.0
         dtr = pi / 180.0
@@ -183,8 +176,6 @@ class robotmodel:
 
 
     # inverse kinematics
-    # helper function, calculates angle theta (for YZ-plane)
-    # returned status: 0=OK, -1=non-existing position
     def delta_calcAngleYZ(selfm, x0: float, y0: float, z0: float):
         y1 = -0.5 * 0.57735 * f      # f/2 * tg 30
         y0 = y0 - 0.5 * 0.57735 * e  # shift center to edge
@@ -232,9 +223,8 @@ class robotmodel:
 
 class dynamics:
     def __init__(self, thetas_init):
-        self.thetas = np.array(thetas_init, dtype=float)  # deg
+        self.thetas = np.array(thetas_init, dtype=float)  
         self.J = np.zeros((3, 3), dtype=float)
-        # [x_min, x_max], [y_min, y_max], [z_min, z_max] in mm
         self.limits = np.array([
             [-160.8, 160.8],
             [-160.8, 160.8],
@@ -278,24 +268,23 @@ class dynamics:
             return np.zeros(3)
         condJ = S[0] / S[-1]
         print(f"This is the Cond Number {condJ}")
-        # Damped least-squares inverse Jacobian for robustness (see next section)
-        lam_base = 0.1   # base damping
+        # Damped least-squares inverse Jacobian for robustness 
+        lam_base = 0.1  
         lam = lam_base * (1.0 + max(0.0, (condJ - 5.0) / 5.0))
         JT = J.T
         qd = JT @ np.linalg.inv(J @ JT + (lam ** 2) * np.eye(3)) @ v
 
-        # Optional: workspace guarding in Cartesian space
+        # Check Workspace
         pos = self.position()   # [x,y,z]
         for k in range(3):
             lower, upper = self.limits[k]
             span = (upper - lower)
-            # If we're within 5% of the min/max in this coordinate, project v away
             if abs(pos[k] - upper) < 0.05 * span and v[k] > 0:
                 v[k] = 0.0
             if abs(pos[k] - lower) < 0.05 * span and v[k] < 0:
                 v[k] = 0.0
 
-        # Recompute qd after potentially modifying v:
+        # Recompute qd 
         qd = JT @ np.linalg.inv(J @ JT + (lam ** 2) * np.eye(3)) @ v
         J = self.numJ()
         pos = self.position()
