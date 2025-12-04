@@ -287,14 +287,12 @@ class dynamics:
 
         # Desired tip velocity in mm/s
         v = v * gain
-        print(f"The Desired Tip Vel is {v}")
         # Jacobian at current joint configuration
         J = self.numJ()
         U, S, Vt = np.linalg.svd(J)
         if S[-1] < 1e-6:
             return np.zeros(3)
         condJ = S[0] / S[-1]
-        print(f"This is the Cond Number {condJ}")
         # Damped least-squares inverse Jacobian for robustness
         # Increase damping aggressively near singularities (x=0 crossing)
         lam_base = 0.5
@@ -325,12 +323,7 @@ class dynamics:
         
         J = self.numJ()
         pos = self.position()
-        print(
-            f"pos={pos}, "
-            f"condJ={condJ:.2f}, "
-            f"Jx={J[0, :]}, "
-
-        )
+        print(f"Pos: {pos}, Thetas: {self.thetas}")
 
         return qd
 
