@@ -323,7 +323,7 @@ class dynamics:
         
         J = self.numJ()
         pos = self.position()
-        print(f"Pos: {pos},\n Thetas: {self.thetas},\n Qdot: {qd},\n CondJ: {condJ}, \n Vel: {v}")
+        print(f"Jacobian: {J}")
 
         return qd
 
