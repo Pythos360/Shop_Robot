@@ -155,6 +155,8 @@ class DeltaControl(Node):
             val = math.copysign(off_us, qd)
             scaled.append(val)
 
+        print(position[1])
+
         # Only print debug info when there's actual motion; always publish motor commands
         has_motion = np.any(np.abs(qdot) > 1e-6)
         has_scaled = any(abs(s) > 1e-9 for s in scaled)
