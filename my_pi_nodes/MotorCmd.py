@@ -138,7 +138,7 @@ class DeltaControl(Node):
         # 2) Integrate thetas
         self.ctrl.thetas = self.ctrl.thetas + qdot * self.dt
         position = self.ctrl.fk(self.ctrl.thetas)
-        print(f"Thetas: {self.ctrl.thetas}, position: {position}, qdot: {qdot}")
+        
 
         # 3) Publish tip position
         self.publish_tip_position(position)
