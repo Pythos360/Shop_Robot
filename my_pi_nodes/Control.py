@@ -304,14 +304,14 @@ class dynamics:
         qd = JT @ np.linalg.inv(J @ JT + (lam ** 2) * np.eye(3)) @ v
 
         # Check Workspace
-        pos = self.position()   # [x,y,z]
-        for k in range(3):
-            lower, upper = self.limits[k]
-            span = (upper - lower)
-            if abs(pos[k] - upper) < 0.05 * span and v[k] > 0:
-                v[k] = 0.0
-            if abs(pos[k] - lower) < 0.05 * span and v[k] < 0:
-                v[k] = 0.0
+        # pos = self.position()   # [x,y,z]
+        # for k in range(3):
+        #     lower, upper = self.limits[k]
+        #     span = (upper - lower)
+        #     if abs(pos[k] - upper) < 0.05 * span and v[k] > 0:
+        #         v[k] = 0.0
+        #     if abs(pos[k] - lower) < 0.05 * span and v[k] < 0:
+        #         v[k] = 0.0
 
         # Recompute qd 
         qd = JT @ np.linalg.inv(J @ JT + (lam ** 2) * np.eye(3)) @ v
@@ -323,7 +323,7 @@ class dynamics:
         
         J = self.numJ()
         pos = self.position()
-        print(f"Pos: {pos}, Thetas: {self.thetas}")
+        print(f"Pos: {pos},\n Thetas: {self.thetas},\n Qdot: {qd},\n CondJ: {condJ}, \n Vel: {v}")
 
         return qd
 
