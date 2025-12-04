@@ -6,20 +6,20 @@ import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import Joy
 from std_msgs.msg import Float32MultiArray as MotorCmd
-from geometry_msgs.msg import Point   # <-- NEW
+from geometry_msgs.msg import Point   
 
-from .Control import dynamics, ctrl_mov, theta_mov  # your dynamics class, including FK/Jacobian
+from .Control import dynamics, ctrl_mov, theta_mov  
 
 # --- hardware / timing constants ---
-DEG_PER_STEP = 0.045        # deg per motor step (given)
-ON_US        = 5.0         # high time for step pulse
-OFF_US_MIN   = 2000.0    # fastest (smallest delay)
-OFF_US_MAX   = 2800.0      # slowest (largest delay)
+DEG_PER_STEP = 0.045        
+ON_US        = 5.0       
+OFF_US_MIN   = 2000.0   
+OFF_US_MAX   = 2800.0      
 
-# max physical step rate (steps/s) at OFF_US_MIN
-MAX_STEP_FREQ = 1e6 / (ON_US + OFF_US_MIN)     # ~ 499 steps/s
-# corresponding max joint speed (deg/s)
-MAX_QDOT   =.4 *  MAX_STEP_FREQ * DEG_PER_STEP   # ~ 45 deg/s
+
+MAX_STEP_FREQ = 1e6 / (ON_US + OFF_US_MIN)   
+
+MAX_QDOT   =.4 *  MAX_STEP_FREQ * DEG_PER_STEP  
 
 class DeltaControl(Node):
     def __init__(self):
@@ -38,7 +38,6 @@ class DeltaControl(Node):
             MotorCmd, 'motor_cmd', 10
         )
 
-        # NEW: publisher for tip position
         self.pub_tip = self.create_publisher(
             Point, 'tip_position', 10
         )
@@ -49,19 +48,19 @@ class DeltaControl(Node):
         # --- motion controller: position targets ---
         self.mover = ctrl_mov(
             self.ctrl,
-            kp=0.8,            # tune
-            max_tip_speed=30., # mm/s
-            tol=1.0            # mm tolerance
+            kp=0.8,           
+            max_tip_speed=30., 
+            tol=1.0          
         )
 
         self.theta_mover = theta_mov(
             self.ctrl,
             kp=2.0,
-            max_qdot=MAX_QDOT,   # use your existing physical limit
+            max_qdot=MAX_QDOT,   
             tol_deg=0.5
         )
 
-        # subscribe to joint theta targets (deg)
+        # subscribe to joint theta targets 
         self.sub_theta_target = self.create_subscription(
             MotorCmd,
             'theta_target',
@@ -72,7 +71,7 @@ class DeltaControl(Node):
         # subscribe to Cartesian move targets
         self.sub_target = self.create_subscription(
             Point,
-            'move_target',     # topic name
+            'move_target',     
             self.on_target,
             10
         )
@@ -101,9 +100,8 @@ class DeltaControl(Node):
     def joy_to_tip_vel(self) -> np.ndarray:
         axes = self.last_joy.axes if self.last_joy.axes else [0.0]*6
 
-        # Example mapping:
-        # Left stick X -> x velocity, left stick Y -> y velocity, right stick Y -> z
-        ax_x = axes[0]    # [-1..1]
+       
+        ax_x = axes[0]    
         ax_y = axes[1]
         ax_z = axes[4] if len(axes) > 4 else 0.0
 
@@ -114,7 +112,6 @@ class DeltaControl(Node):
         return np.array([vx, vy, vz], dtype=float)
 
     def on_timer(self):
-        # --- choose qdot source: theta_mover > mover > joystick ---
         if self.theta_mover.active:
             # Joint-space control
             qdot = self.theta_mover.update(self.dt)
@@ -133,7 +130,6 @@ class DeltaControl(Node):
             else:
                 qdot = self.ctrl.qdot_from_v(v)
 
-        # --- the rest of your existing on_timer stays the same ---
         # 1) Limit qdot to physical range (MAX_QDOT)
         max_abs = np.max(np.abs(qdot))
         if max_abs > MAX_QDOT and max_abs > 1e-6:
@@ -147,7 +143,7 @@ class DeltaControl(Node):
         # 3) Publish tip position
         self.publish_tip_position(position)
 
-        # 4) Map qdot -> signed off_us (your existing mapping)
+        # 4) Map qdot 
         scaled = []
         for qd in qdot:
             if abs(qd) < 1e-3:
@@ -168,7 +164,6 @@ class DeltaControl(Node):
     def publish_tip_position(self, position: np.ndarray):
         """Publish tip position as geometry_msgs/Point."""
         p = Point()
-        # assuming fk returns [x, y, z]
         p.x = float(position[0])
         p.y = float(position[1])
         p.z = float(position[2])
