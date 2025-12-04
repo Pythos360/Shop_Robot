@@ -155,6 +155,8 @@ class DeltaControl(Node):
             val = math.copysign(off_us, qd)
             scaled.append(val)
 
+        if qdot is not None:
+            print(f"qdot: {qdot}, scaled: {scaled}")
         m = MotorCmd()
         m.data = [float(scaled[0]), float(scaled[1]), float(scaled[2])]
         self.pub_motor.publish(m)
