@@ -85,7 +85,7 @@ def delta_calcAngleYZ(x0: float, y0: float, z0: float):
     yj = (y1 - a * b - math.sqrt(d)) / (b * b + 1.0)  # choosing outer point
     zj = a + b * yj
 
-    theta = 180.0 * math.atan(-zj / (y1 - yj)) / pi + (180.0 if yj > y1 else 0.0)
+    theta = 180.0 * math.atan2(-zj, y1 - yj) / pi + (180.0 if yj > y1 else 0.0)
     return 0, theta
 
 
@@ -192,7 +192,8 @@ class robotmodel:
         yj = (y1 - a * b - math.sqrt(d)) / (b * b + 1.0)  # choosing outer point
         zj = a + b * yj
 
-        theta = 180.0 * math.atan(-zj / (y1 - yj)) / pi + (180.0 if yj > y1 else 0.0)
+        theta = 180.0 * math.atan2(-zj, y1 - yj) / pi + (180.0 if yj > y1 else 0.0)
+        
         return 0, theta
 
 
