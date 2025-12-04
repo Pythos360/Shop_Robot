@@ -86,6 +86,7 @@ def delta_calcAngleYZ(x0: float, y0: float, z0: float):
     zj = a + b * yj
 
     theta = 180.0 * math.atan2(-zj, y1 - yj) / pi + (180.0 if yj > y1 else 0.0)
+    print("atan2")
     return 0, theta
 
 
@@ -226,10 +227,17 @@ class dynamics:
     def __init__(self, thetas_init):
         self.thetas = np.array(thetas_init, dtype=float)  
         self.J = np.zeros((3, 3), dtype=float)
-        self.limits = np.array([
+        # Joint angle limits [theta1, theta2, theta3] in degrees
+        self.theta_limits = np.array([
             [-160.8, 160.8],
             [-160.8, 160.8],
             [-370.0, -100.0],
+        ])
+        # Cartesian workspace limits [x, y, z] in mm (symmetric for x,y; z is depth)
+        self.limits = np.array([
+            [-250.0, 250.0],    # x limits (mm)
+            [-250.0, 250.0],    # y limits (mm)
+            [-500.0, -50.0],    # z limits (mm)
         ])
 
     def fk(self, thetas_deg):
