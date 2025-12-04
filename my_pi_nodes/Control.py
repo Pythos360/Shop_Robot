@@ -85,8 +85,18 @@ def delta_calcAngleYZ(x0: float, y0: float, z0: float):
     yj = (y1 - a * b - math.sqrt(d)) / (b * b + 1.0)  # choosing outer point
     zj = a + b * yj
 
-    theta = 180.0 * math.atan2(-zj, y1 - yj) / pi + (180.0 if yj > y1 else 0.0)
-    print("atan2")
+    # Use atan2 to compute angle continuously across all quadrants
+    # atan2(y, x) gives angle in [-π, π]
+    # Here: y = -zj, x = (y1 - yj)
+    theta_rad = math.atan2(-zj, y1 - yj)
+    theta = 180.0 * theta_rad / pi
+    
+    # Adjust to keep angles in [-180, 180] range consistently
+    if theta < -180.0:
+        theta += 360.0
+    elif theta > 180.0:
+        theta -= 360.0
+    
     return 0, theta
 
 
@@ -193,7 +203,15 @@ class robotmodel:
         yj = (y1 - a * b - math.sqrt(d)) / (b * b + 1.0)  # choosing outer point
         zj = a + b * yj
 
-        theta = 180.0 * math.atan2(-zj, y1 - yj) / pi + (180.0 if yj > y1 else 0.0)
+        # Use atan2 to compute angle continuously across all quadrants
+        theta_rad = math.atan2(-zj, y1 - yj)
+        theta = 180.0 * theta_rad / pi
+        
+        # Adjust to keep angles in [-180, 180] range consistently
+        if theta < -180.0:
+            theta += 360.0
+        elif theta > 180.0:
+            theta -= 360.0
         
         return 0, theta
 
@@ -277,9 +295,13 @@ class dynamics:
             return np.zeros(3)
         condJ = S[0] / S[-1]
         print(f"This is the Cond Number {condJ}")
-        # Damped least-squares inverse Jacobian for robustness 
-        lam_base = 0.1  
-        lam = lam_base * (1.0 + max(0.0, (condJ - 5.0) / 5.0))
+        # Damped least-squares inverse Jacobian for robustness
+        # Increase damping aggressively near singularities (x=0 crossing)
+        lam_base = 0.5
+        if condJ > 20.0:  # High ill-conditioning near singularities
+            lam = 2.0 + 0.1 * (condJ - 20.0)
+        else:
+            lam = lam_base * (1.0 + max(0.0, (condJ - 5.0) / 5.0))
         JT = J.T
         qd = JT @ np.linalg.inv(J @ JT + (lam ** 2) * np.eye(3)) @ v
 
@@ -295,6 +317,12 @@ class dynamics:
 
         # Recompute qd 
         qd = JT @ np.linalg.inv(J @ JT + (lam ** 2) * np.eye(3)) @ v
+        
+        # Reduce velocity near singularities to prevent jumps
+        if condJ > 15.0:
+            vel_scale = 1.0 / (1.0 + 0.1 * (condJ - 15.0))
+            qd = qd * vel_scale
+        
         J = self.numJ()
         pos = self.position()
         print(
