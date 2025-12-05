@@ -279,7 +279,7 @@ class dynamics:
             self.J[:, i] = (x_plus - x_minus) / (2.0 * h)
         return self.J
 
-    def qdot_from_v(self, v, gain):
+    def qdot_from_v(self, v, gain = 5):
         v = np.asarray(v, dtype=float)
 
         # Deadzone
