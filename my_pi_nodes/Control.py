@@ -329,7 +329,7 @@ class dynamics:
 
     
     def step(self, dt, gain= 5):
-        qd = self.qdot(gain=gain)   # deg/s
+        qd = self.qdot(gain=5)   # deg/s
         self.thetas = self.thetas + qd * dt
         print(f"step size: {qd * dt}")
         return self.thetas
