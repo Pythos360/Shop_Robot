@@ -279,7 +279,7 @@ class dynamics:
             self.J[:, i] = (x_plus - x_minus) / (2.0 * h)
         return self.J
 
-    def qdot_from_v(self, v, gain=10):
+    def qdot_from_v(self, v, gain):
         v = np.asarray(v, dtype=float)
 
         # Deadzone
@@ -323,14 +323,15 @@ class dynamics:
         
         J = self.numJ()
         pos = self.position()
-        print(f"Jacobian: {J}, Thetas: {self.thetas}")
+        
 
         return qd
 
     
-    def step(self, dt, gain=.0000005):
+    def step(self, dt, gain= 5):
         qd = self.qdot(gain=gain)   # deg/s
         self.thetas = self.thetas + qd * dt
+        print(f"step size: {qd * dt}")
         return self.thetas
     
     def position(self):
