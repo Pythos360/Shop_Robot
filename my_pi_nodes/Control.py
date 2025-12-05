@@ -320,6 +320,8 @@ class dynamics:
         if condJ > 15.0:
             vel_scale = 1.0 / (1.0 + 0.1 * (condJ - 15.0))
             qd = qd * vel_scale
+
+        print(f"step size: {qd}")
         
         J = self.numJ()
         pos = self.position()
