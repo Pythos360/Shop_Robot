@@ -160,7 +160,7 @@ class DeltaControl(Node):
         has_motion = np.any(np.abs(qdot) > 1e-6)
         has_scaled = any(abs(s) > 1e-9 for s in scaled)
         if has_motion and has_scaled:
-            print(f"Other thetas: {self.ctrl.thetas}")
+            print(f"Steps: {scaled}")
 
         m = MotorCmd()
         m.data = [float(scaled[0]), float(scaled[1]), float(scaled[2])]
