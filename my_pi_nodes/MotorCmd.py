@@ -13,7 +13,7 @@ from .Control import dynamics, ctrl_mov, theta_mov
 # --- hardware / timing constants ---
 DEG_PER_STEP = 0.045        
 ON_US        = 5.0       
-OFF_US_MIN   = 2000.0   
+OFF_US_MIN   = 1000.0   
 OFF_US_MAX   = 2800.0      
 
 
