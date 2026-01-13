@@ -37,9 +37,6 @@ class DeltaControl(Node):
         self.joy_gain = 1.0          # scales joystick vector before passing to ctrl.step
         self.cart_gain = 5.0         # passed into ctrl.step -> qdot_from_v scaling
 
-        # ---- optional motion controllers ----
-        self.mover = ctrl_mov(self.ctrl, kp=0.8, max_tip_speed=30.0, tol=1.0)
-        self.theta_mover = theta_mov(self.ctrl, kp=2.0, max_qdot=MAX_QDOT, tol_deg=0.5)
 
         # ---- ROS I/O ----
         self.sub_joy = self.create_subscription(Joy, "joy", self.on_joy, 10)
