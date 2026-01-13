@@ -8,7 +8,7 @@ from sensor_msgs.msg import Joy
 from std_msgs.msg import Float32MultiArray as MotorCmd
 from geometry_msgs.msg import Point
 
-from .Control_Test import dynamics, ctrl_mov, theta_mov
+from .Control_Test import dynamics
 
 
 # -----------------------------
