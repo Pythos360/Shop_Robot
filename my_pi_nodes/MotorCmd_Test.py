@@ -191,17 +191,13 @@ def main():
     rclpy.shutdown()
 
 
-def main(args=None):
-    import rclpy
-    rclpy.init(args=args)
-
-    node = MotorCmd_Test()   # <-- replace with your Node class name
+def main():
+    rclpy.init()
+    node = DeltaControl()
     rclpy.spin(node)
-
     node.destroy_node()
     rclpy.shutdown()
 
-
-if __name__ == "__main__":
+if __name__ == '__main__':
     main()
 
