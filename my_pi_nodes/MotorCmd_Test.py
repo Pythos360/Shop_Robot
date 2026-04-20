@@ -30,7 +30,7 @@ QDOT_STOP = 0.05  # deg/s (tune 0.05–0.2)
 DT = 0.02  # 50 Hz
 JOY_DEADZONE = 0.10
 JOY_GAIN = 1.0
-CART_GAIN = 50.0  # scales joystick command inside qdot_from_v
+CART_GAIN = 100.0  # scales joystick command inside qdot_from_v
 
 
 class MotorCmdTest(Node):
