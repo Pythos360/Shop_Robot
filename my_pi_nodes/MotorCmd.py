@@ -1,69 +1,184 @@
-# my_pi_nodes/MotorCmd.py
+# my_pi_nodes/delta_control.py
+import math
+import numpy as np
+
 import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import Joy
 from std_msgs.msg import Float32MultiArray as MotorCmd
+from geometry_msgs.msg import Point   
 
-BTN_SPEED_DOWN = 5  # slower
-BTN_SPEED_UP   = 4  # faster
+from .Control import dynamics, ctrl_mov, theta_mov  
 
-AXIS_A = 0
-AXIS_B = 1
-AXIS_C = 3
+# --- hardware / timing constants ---
+DEG_PER_STEP = 0.045        
+ON_US        = 5.0       
+OFF_US_MIN   = 1000.0   
+OFF_US_MAX   = 2800.0      
 
-MIN_OFF_US = 100
-MAX_OFF_US = 5000
-DEADBAND   = 0.05
 
-def vel_from_axis(x: float) -> int:
-    if x >  DEADBAND: return +1
-    if x < -DEADBAND: return -1
-    return 0
+MAX_STEP_FREQ = 1e6 / (ON_US + OFF_US_MIN)   
 
-class JoyToStep(Node):
+MAX_QDOT   =.4 *  MAX_STEP_FREQ * DEG_PER_STEP  
+
+class DeltaControl(Node):
     def __init__(self):
-        super().__init__('joy_to_step')
-        self.pub = self.create_publisher(MotorCmd, 'motor_cmd', 10)
-        self.sub = self.create_subscription(Joy, 'joy', self.on_joy, 10)
+        super().__init__('delta_control')
 
-        self.off_us = 2800
-        self.prev_buttons = []  # needed for edge detection
+        # --- state ---
+        thetas0 = np.array([0.0, 0.0, 0.0])
+        self.ctrl = dynamics(thetas0)
+        self.last_joy = Joy()
 
-    def _axis(self, axes, i):
-        return axes[i] if i < len(axes) else 0.0
-
-    def _rose(self, buttons, i):
-        prev = self.prev_buttons[i] if i < len(self.prev_buttons) else 0
-        now  = 1 if (i < len(buttons) and buttons[i] == 1) else 0
-        return prev == 0 and now == 1
-
-    def on_joy(self, msg: Joy):
-        # Read three axes -> three signed velocities (-1,0,+1)
-        velA = vel_from_axis(self._axis(msg.axes, AXIS_A))
-        velB = vel_from_axis(self._axis(msg.axes, AXIS_B))
-        velC = vel_from_axis(self._axis(msg.axes, AXIS_C))
-
-        # Speed up/down on rising edges
-        if self._rose(msg.buttons, BTN_SPEED_UP):
-            self.off_us = max(MIN_OFF_US, self.off_us - 100)
-        if self._rose(msg.buttons, BTN_SPEED_DOWN):
-            self.off_us = min(MAX_OFF_US, self.off_us + 100)
-
-        # Publish one message with exactly FOUR elements
-        m = MotorCmd()
-        m.data = [float(velA), float(velB), float(velC), float(self.off_us)]
-        self.pub.publish(m)
-
-        self.get_logger().info(
-            f"velA={velA} velB={velB} velC={velC} off_us={self.off_us}"
+        # --- ROS I/O ---
+        self.sub_joy = self.create_subscription(
+            Joy, 'joy', self.on_joy, 10
+        )
+        self.pub_motor = self.create_publisher(
+            MotorCmd, 'motor_cmd', 10
         )
 
-        # Update edge state
-        self.prev_buttons = list(msg.buttons)
+        self.pub_tip = self.create_publisher(
+            Point, 'tip_position', 10
+        )
+
+        # control loop at 50 Hz
+        self.dt = 0.02
+        self.timer = self.create_timer(self.dt, self.on_timer)
+        # --- motion controller: position targets ---
+        self.mover = ctrl_mov(
+            self.ctrl,
+            kp=0.8,           
+            max_tip_speed=30., 
+            tol=1.0          
+        )
+
+        self.theta_mover = theta_mov(
+            self.ctrl,
+            kp=2.0,
+            max_qdot=MAX_QDOT,   
+            tol_deg=0.5
+        )
+
+        # subscribe to joint theta targets 
+        self.sub_theta_target = self.create_subscription(
+            MotorCmd,
+            'theta_target',
+            self.on_theta_target,
+            10
+        )
+
+        # subscribe to Cartesian move targets
+        self.sub_target = self.create_subscription(
+            Point,
+            'move_target',     
+            self.on_target,
+            10
+        )
+
+    def on_target(self, msg: Point):
+        target = np.array([msg.x, msg.y, msg.z], dtype=float)
+        self.get_logger().info(f"New move_target: {target}")
+        self.mover.set_target(target)
+
+    def on_theta_target(self, msg: MotorCmd):
+        data = list(msg.data)
+        if len(data) != 3:
+            self.get_logger().warn(f"theta_target needs 3 elements, got {len(data)}")
+            return
+        target = np.array(data, dtype=float)
+        self.get_logger().info(f"New theta_target: {target}")
+        self.theta_mover.set_target(target)
+
+    def on_joy(self, msg: Joy):
+        self.last_joy = msg
+
+        if len(msg.buttons) > 1 and msg.buttons[1]:
+            self.get_logger().info("Move cancelled by joystick button.")
+            self.mover.stop()
+
+    def joy_to_tip_vel(self) -> np.ndarray:
+        axes = self.last_joy.axes if self.last_joy.axes else [0.0]*6
+
+       
+        ax_x = axes[0]    
+        ax_y = axes[1]
+        ax_z = axes[4] if len(axes) > 4 else 0.0
+
+        vx =  ax_x
+        vy = -ax_y
+        vz = -ax_z
+
+        return np.array([vx, vy, vz], dtype=float)
+
+    def on_timer(self):
+        if self.theta_mover.active:
+            # Joint-space control
+            qdot = self.theta_mover.update(self.dt)
+
+        elif self.mover.active:
+            # Cartesian target control
+            qdot = self.mover.update(self.dt)
+
+        else:
+            # Joystick-velocity mode
+            v = self.joy_to_tip_vel()
+            v[np.abs(v) < 0.1] = 0.0
+
+            if np.linalg.norm(v) < 1e-3:
+                qdot = np.zeros(3, dtype=float)
+            else:
+                qdot = self.ctrl.qdot_from_v(v)
+
+        # 1) Limit qdot to physical range (MAX_QDOT)
+        max_abs = np.max(np.abs(qdot))
+        if max_abs > MAX_QDOT and max_abs > 1e-6:
+            qdot = qdot * (MAX_QDOT / max_abs)
+
+        # 2) Integrate thetas
+        self.ctrl.thetas = self.ctrl.thetas + qdot * self.dt
+        position = self.ctrl.fk(self.ctrl.thetas)
+        
+
+        # 3) Publish tip position
+        self.publish_tip_position(position)
+
+        # 4) Map qdot 
+        scaled = []
+        for qd in qdot:
+            if abs(qd) < 1e-3:
+                scaled.append(0.0)
+                continue
+
+            s = min(abs(qd) / MAX_QDOT, 1.0)
+            off_us = OFF_US_MAX - s * (OFF_US_MAX - OFF_US_MIN)
+            val = math.copysign(off_us, qd)
+            scaled.append(val)
+
+
+        # Only print debug info when there's actual motion; always publish motor commands
+        has_motion = np.any(np.abs(qdot) > 1e-6)
+        has_scaled = any(abs(s) > 1e-9 for s in scaled)
+        if has_motion and has_scaled:
+            print(f"Steps: {scaled}")
+
+        m = MotorCmd()
+        m.data = [float(scaled[0]), float(scaled[1]), float(scaled[2])]
+        self.pub_motor.publish(m)
+
+
+
+    def publish_tip_position(self, position: np.ndarray):
+        """Publish tip position as geometry_msgs/Point."""
+        p = Point()
+        p.x = float(position[0])
+        p.y = float(position[1])
+        p.z = float(position[2])
+        self.pub_tip.publish(p)
 
 def main():
     rclpy.init()
-    node = JoyToStep()
+    node = DeltaControl()
     rclpy.spin(node)
     node.destroy_node()
     rclpy.shutdown()

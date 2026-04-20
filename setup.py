@@ -27,6 +27,10 @@ setup(
             'controller = my_pi_nodes.controller:main',
             'serial_bridge = my_pi_nodes.serial_bridge:main',
             'MotorCmd = my_pi_nodes.MotorCmd:main',
+            'Control = my_pi_nodes.Control:main',
+            'tip_plotter = my_pi_nodes.tip_plotter:main',
+            'MotorCmd_Test = my_pi_nodes.MotorCmd_Test:main',
+            'Control_Test = my_pi_nodes.Control_Test:main',
         ],
     },
 )
