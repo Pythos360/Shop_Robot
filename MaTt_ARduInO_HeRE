@@ -1,0 +1,121 @@
+#include <Arduino.h>
+
+// -------- Pins --------
+const uint8_t STEP_PINS[3] = {5, 6, 9};  // A,B,C
+const uint8_t DIR_PINS [3] = {4, 7, 8};  // A,B,C
+
+// -------- State from serial --------
+
+// cmd[i] is a *signed off_us* value from the Pi:
+//   0   -> motor stopped
+//   >0  -> forward, off_us =  cmd[i]
+//   <0  -> reverse, off_us = -cmd[i]
+float cmd[3] = {0.0f, 0.0f, 0.0f};
+
+const uint16_t on_us = 5;   // HIGH pulse width for all motors
+
+// -------- Pulse schedulers (per motor) --------
+bool          step_high[3]      = {false, false, false};
+unsigned long next_toggle_us[3] = {0, 0, 0};
+
+// -------- Serial buffer --------
+#define LINE_BUF 96
+char linebuf[LINE_BUF];
+
+// ---------------- Utils ----------------
+static inline void trimTail(char* s) {
+  int n = strlen(s);
+  while (n && (s[n-1] == '\r' || s[n-1] == ' ' || s[n-1] == '\t')) s[--n] = 0;
+}
+
+// ---------------- Serial parser ----------------
+// Format from Pi: "cmdA,cmdB,cmdC\n"
+// Each is a signed integer off_us (e.g. -2200, 0, 2600).
+bool read_serial() {
+  if (!Serial.available()) return false;
+
+  size_t n = Serial.readBytesUntil('\n', linebuf, LINE_BUF - 1);
+  linebuf[n] = '\0';
+  trimTail(linebuf);
+  if (n == 0) return false;
+
+  long a = 0, b = 0, c = 0;
+  if (sscanf(linebuf, "%ld,%ld,%ld", &a, &b, &c) == 3) {
+    cmd[0] = (float)a;
+    cmd[1] = (float)b;
+    cmd[2] = (float)c;
+
+    // Debug so you can see values in Serial Monitor if needed
+    Serial.print(F("Parsed cmds -> A=")); Serial.print(cmd[0]);
+    Serial.print(F(" B="));              Serial.print(cmd[1]);
+    Serial.print(F(" C="));              Serial.println(cmd[2]);
+
+    return true;
+  }
+
+  Serial.print(F("Parse fail: ")); Serial.println(linebuf);
+  return false;
+}
+
+// ---------------- Motor driving ----------------
+void driveMotors() {
+  unsigned long now = micros();
+
+  for (int i = 0; i < 3; ++i) {
+    float c = cmd[i];
+
+    // If nearly zero -> motor stopped
+    if (fabs(c) < 1.0f) {  // threshold so tiny noise doesn't move the motor
+      // ensure step is LOW and scheduler is idle-ish
+      if (step_high[i]) {
+        digitalWrite(STEP_PINS[i], LOW);
+        step_high[i] = false;
+      }
+      next_toggle_us[i] = now;
+      continue;
+    }
+
+    // Set direction based on sign of cmd
+    if (c > 0.0f) {
+      digitalWrite(DIR_PINS[i], HIGH);  // one direction
+    } else {
+      digitalWrite(DIR_PINS[i], LOW);   // opposite direction
+    }
+
+    unsigned long off_us = (unsigned long)fabs(c);  // off-time from Pi
+
+    // Toggle this motor according to its own schedule
+    if ((long)(now - next_toggle_us[i]) >= 0) {
+      if (step_high[i]) {
+        // End pulse: go LOW and wait off_us
+        digitalWrite(STEP_PINS[i], LOW);
+        step_high[i]      = false;
+        next_toggle_us[i] = now + off_us;
+      } else {
+        // Start pulse: go HIGH and wait on_us
+        digitalWrite(STEP_PINS[i], HIGH);
+        step_high[i]      = true;
+        next_toggle_us[i] = now + on_us;
+      }
+    }
+  }
+}
+
+// ---------------- Arduino boilerplate ----------------
+void setup() {
+  Serial.begin(115200);
+  Serial.println(F("Ready. Format: cmdA,cmdB,cmdC  (signed off_us; 0=stop)"));
+
+  for (int i = 0; i < 3; i++) {
+    pinMode(STEP_PINS[i], OUTPUT);
+    pinMode(DIR_PINS[i],  OUTPUT);
+    digitalWrite(STEP_PINS[i], LOW);
+    step_high[i]      = false;
+    next_toggle_us[i] = micros();
+  }
+}
+
+void loop() {
+  read_serial();   // update commands when new line arrives
+  driveMotors();   // run all three in parallel with independent timing
+}
